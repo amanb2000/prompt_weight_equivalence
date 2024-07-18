@@ -4,3 +4,10 @@
 distribution over subsequent token sequences is identical to that of a prompted
 model.
 
+
+
+## Results
+
+```bash
+python3 train_loop.py 
+```
