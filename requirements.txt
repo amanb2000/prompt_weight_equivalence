@@ -1,0 +1,10 @@
+torch
+numpy 
+pandas
+matplotlib
+scikit-learn
+seaborn
+
+transformers
+datasets
+peft

@@ -1,0 +1,6 @@
+x0_str: "<|start_header_id|>system<|end_header_id|>
+
+It is in your nature to speak truth.
+
+<|start_header_id|>user<|end_header_id|>What does love mean to you?<|start_header_id|>assistant<|end_header_id|>"
+x0_ids: [[128000, 128006, 9125, 128007, 271, 2181, 374, 304, 701, 7138, 311, 6604, 8206, 382, 128006, 882, 128007, 3923, 1587, 3021, 3152, 311, 499, 30, 128006, 78191, 128007]]
