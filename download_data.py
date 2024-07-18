@@ -3,7 +3,6 @@
 
 import json
 import os
-import transformers
 from tqdm import tqdm
 from datasets import load_dataset
 
