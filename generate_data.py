@@ -88,9 +88,10 @@ with open(args.traj_out_file, 'w') as f:
             # use the prompt string with the system prompt x0 and the question
             # to generate trajectories
             input_ids = tokenizer(prompt_q_str, return_tensors="pt").to(model.device)
-
             batch_input_ids = input_ids['input_ids'].repeat(num_seq_to_gen, 1)
             attention_mask = batch_input_ids.ne(tokenizer.pad_token_id).long()
+
+
 
             # output has shape [batch, num_tokens_total]
             output = model.generate(
@@ -103,6 +104,8 @@ with open(args.traj_out_file, 'w') as f:
                 pad_token_id = tokenizer.eos_token_id
             )
 
+
+
             # attention_mask = output.ne(tokenizer.pad_token_id).long()
             # with torch.no_grad(): 
             #     inf_out = model(output, attention_mask = attention_mask)
@@ -111,19 +114,28 @@ with open(args.traj_out_file, 'w') as f:
             for j in range(num_seq_to_gen): 
                 # Decode the generated sequence
                 generated_text = tokenizer.decode(output[j], skip_special_tokens=False)
-                # print(f"Generated text i={i} j={j}: ", generated_text)
 
+                # within generated_text, find prompt_q_str and replace with noprompt_q_str
+                nosys_input_str = generated_text.replace(prompt_q_str, noprompt_q_str)
+                nosys_input_ids = tokenizer(nosys_input_str, return_tensors="pt").to(model.device)['input_ids'][:, 1:]
                 # create a dictionary with the required format 
                 # make an attention mask for the input_ids -- no attention to pad tokens 
+                generated_text_mask = torch.ones_like(output[j]) # [num_tokens]
+                generated_text_mask[:batch_input_ids.shape[1]] *= 0
+
+                generated_text_mask[output[j] == tokenizer.eos_token_id] *= 0
 
                 example = {
-                    "text": generated_text, 
-                    "input_ids": output[j].tolist(), 
-                    "attention_mask": attention_mask[j].tolist(),
-                    "prompt_text": prompt_q_str,
-                    "noprompt_text": noprompt_q_str,
-                    "prompt_input_ids": prompt_q_ids[0, :].tolist(),
-                    "noprompt_input_ids": noprompt_q_ids[0, :].tolist()
+                    "text": generated_text,  # full prompt + generated text (str)
+                    "input_ids": output[j].tolist(), # full prompt + generated text (ids)
+                    "attention_mask": attention_mask[j].tolist(), # eh
+                    "prompt_text": prompt_q_str, # full prompt (str)
+                    "noprompt_text": noprompt_q_str, # prompt without system prompt (includes question though)
+                    "prompt_input_ids": prompt_q_ids[0, :].tolist(), # 
+                    "noprompt_input_ids": noprompt_q_ids[0, :].tolist(),
+                    "nosys_input_str": nosys_input_str,
+                    "nosys_input_ids": nosys_input_ids[0, :].tolist(), 
+                    "generated_text_mask": generated_text_mask.tolist(),
                     # "logits": batch_logits[j, :, :].tolist()
                 }
 
