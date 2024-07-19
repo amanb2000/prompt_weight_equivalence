@@ -125,17 +125,20 @@ with open(args.traj_out_file, 'w') as f:
 
                 generated_text_mask[output[j] == tokenizer.eos_token_id] *= 0
 
+                length_diff = output[j].shape[0] - nosys_input_ids.shape[1]
+
                 example = {
                     "text": generated_text,  # full prompt + generated text (str)
                     "input_ids": output[j].tolist(), # full prompt + generated text (ids)
                     "attention_mask": attention_mask[j].tolist(), # eh
                     "prompt_text": prompt_q_str, # full prompt (str)
-                    "noprompt_text": noprompt_q_str, # prompt without system prompt (includes question though)
+                    "prompt_text_nosys": noprompt_q_str, # prompt without system prompt (includes question though)
                     "prompt_input_ids": prompt_q_ids[0, :].tolist(), # 
-                    "noprompt_input_ids": noprompt_q_ids[0, :].tolist(),
-                    "nosys_input_str": nosys_input_str,
-                    "nosys_input_ids": nosys_input_ids[0, :].tolist(), 
-                    "generated_text_mask": generated_text_mask.tolist(),
+                    "prompt_input_ids_nosys": noprompt_q_ids[0, :].tolist(), # prom
+                    "text_nosys": nosys_input_str, # input ids with no system prompt (str)
+                    "input_ids_nosys": nosys_input_ids[0, :].tolist(), # input ids with no system prompt (ids)
+                    "generated_text_mask": generated_text_mask.tolist(), # applies to input_ids
+                    "generated_text_mask_nosys": generated_text_mask[length_diff:].tolist() # mask for noprompt_input_ids
                     # "logits": batch_logits[j, :, :].tolist()
                 }
 
