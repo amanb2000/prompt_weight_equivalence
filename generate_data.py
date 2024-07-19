@@ -24,6 +24,7 @@ parser.add_argument('--temperature', type=float, default=2.0, help='Temperature 
 parser.add_argument('--batch_size', type=int, default=38, help='Batch size for processing')
 parser.add_argument('--model_name', type=str, default= "meta-llama/Meta-Llama-3-8B-Instruct", help='Model name to use')
 parser.add_argument('--traj_out_file', type=str, default="data/traj_lex.jsonl", help='Output file for generated sequences. Default = "data/traj_lex.jsonl"')
+parser.add_argument('--seed', type=int, default=42, help='Seed for random number generation')
 
 args = parser.parse_args()
 
@@ -46,7 +47,7 @@ with open(args.x0_file, 'r') as f:
 
 # load question_dataset_file from args.question_dataset_file
 import datasets
-dataset = datasets.load_dataset('json', data_files=args.question_dataset)
+dataset = datasets.load_dataset('json', data_files=args.question_dataset).shuffle(seed=args.seed)
 print("Length of train_dataset: ", len(dataset['train']))
 
 
