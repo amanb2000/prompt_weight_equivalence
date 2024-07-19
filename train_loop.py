@@ -11,6 +11,7 @@ from peft import get_peft_config, PeftModel, PeftConfig, get_peft_model, LoraCon
 import torch.nn.functional as F
 from datetime import datetime
 import argparse
+from tqdm import tqdm
 import pdb
 
 
@@ -30,7 +31,8 @@ parser.add_argument('--num_epochs', type=int, default=1000, help='Number of epoc
 parser.add_argument('--batch_size', type=int, default=10, help='Batch size for training. Default = 10')
 parser.add_argument('--learning_rate', type=float, default=1e-4, help='Learning rate for optimizer. Default = 1e-4')
 parser.add_argument('--device', type=str, default="cuda" if torch.cuda.is_available() else "cpu", help='Device to run the training on. Default = "cuda" if available, else "cpu"')
-parser.add_argument('--data_path', type=str, default="data/traj_lex_nseq1000_maxlen300_minlen100_temp2.0.jsonl", help='Path to the training data. Default = "data/traj_lex_nseq1000_maxlen300_minlen100_temp2.0.jsonl"')
+parser.add_argument('--data_path', type=str, default="data/traj_lex_nseq1000_maxlen300_minlen100_temp2.0.jsonl", help='Path to the training data. Default = "data/train_traj_temp2.0_numq100_numseq25_x0truth_20240718.jsonl"')
+parser.add_argument('--val_path', type=str, default="data/traj_lex_nseq1000_maxlen300_minlen100_temp2.0.jsonl", help='Path to the validation data. Default = "data/val_traj_temp2.0_numq25_numseq25_x0truth_20240718.jsonl"')
 parser.add_argument('--out_dir', type=str, default="results/traj_lex_01", help='Output directory for results. Default = "results/traj_lex_01"')
 
 # Parse arguments
@@ -84,6 +86,74 @@ log("Loading dataset", log_path)
 dataset = load_dataset('json', data_files=data_path)
 log("Dataset loaded", log_path)
 
+# load validation dataset
+log("Loading validation dataset", log_path) 
+val_dataset = load_dataset('json', data_files=args.val_path)
+log("Validation dataset loaded", log_path)
+
+
+def do_epoch(prompted_llm, peft_model, tokenizer,
+             dataset, 
+             batch_size, 
+             log_path, 
+             optimizer, 
+             do_step = True):
+    """
+    Trains the model for one epoch on the given dataset.
+    """
+    kl_divs = []
+    for i in tqdm(range(0, len(dataset['train']), batch_size)):
+        log(f"Batch {i}", log_path)
+        batch = dataset['train'][i:i+batch_size]
+        input_ids = batch['input_ids']
+
+        main_text_ids = [[128000] + x[17:] for x in input_ids]
+        # pad each to max length 
+        max_length = max([len(x) for x in main_text_ids])
+        # use tokenizer.pad_token_id
+        main_text_ids = [x + [tokenizer.pad_token_id]*(max_length-len(x)) for x in main_text_ids]
+        # assert all have the same length 
+        assert all([len(x) == max_length for x in main_text_ids])
+
+        inputs_unprompted = torch.tensor(main_text_ids).to(device)
+        # print("Unprompted inputs shape", inputs_unprompted.shape)
+
+        # pad input_ids to max length 
+        max_length = max([len(x) for x in input_ids])
+        input_ids_padded = [x + [tokenizer.pad_token_id]*(max_length-len(x)) for x in input_ids]
+
+        # Concatenate the prompt to the input for the prompted model for all inputs in the batch
+        inputs_prompted = torch.tensor(input_ids_padded).to(device)
+        # print("Prompted inputs shape", inputs_prompted.shape)
+
+        log("Computing unprompted logits...", log_path)
+        unprompted_logits = peft_model(inputs_unprompted).logits
+        log("Done computing prompted logits...", log_path)
+
+        log("Computing prompted logits...", log_path)
+        with torch.no_grad(): 
+            prompted_logits = prompted_llm(inputs_prompted).logits[:, -inputs_unprompted.shape[1]:, :]
+        log("Done computing prompted logits...", log_path)
+
+        # Compute KL divergence: KL(prompted, unprompted)
+        kl_div_ = F.kl_div(F.log_softmax(unprompted_logits, dim=-1), 
+                        F.log_softmax(prompted_logits, dim=-1), 
+                        reduction='none', 
+                        log_target=True)
+        
+        kl_mask = inputs_unprompted != tokenizer.pad_token_id
+        kl_div = kl_div_[kl_mask, :].sum() / batch_size
+        
+        kl_div.backward()
+        if do_step: 
+            optimizer.step()
+        optimizer.zero_grad()
+        log(f"Done computing KL divergence = {kl_div.item()}", log_path)
+        kl_divs.append(kl_div.item())
+
+    print(f"Epoch {epoch} loss: {kl_div.item()}")
+    log(f"Epoch {epoch} loss: {kl_div.item()}", log_path)
+    return kl_divs
 
 
 
@@ -157,41 +227,27 @@ if __name__ == "__main__":
 
     for epoch in range(num_epochs):
         log("Started epoch " + str(epoch), log_path)
-        for i in range(0, len(dataset), batch_size):
-            log(f"Batch {i}", log_path)
-            batch = dataset['train'][i:i+batch_size]
-            input_ids = batch['input_ids']
+        train_kls = do_epoch(prompted_llm, peft_model, tokenizer,
+                 dataset=dataset, 
+                 batch_size=batch_size,
+                 log_path=log_path,
+                 optimizer=optimizer,
+                 do_step=True)
+        # log(f"All train kls (epoch={epoch}): ", train_kls)
+        log(f"Train kl divergence (epoch={epoch}): {sum(train_kls)/len(train_kls)}", log_path)
 
-            main_text_ids = [[128000] + x[28:] for x in input_ids]
+        log("Done epoch " + str(epoch), log_path)
 
-            inputs_unprompted = torch.tensor(main_text_ids).to(device)
-            print("Unprompted inputs shape", inputs_unprompted.shape)
-            # Concatenate the prompt to the input for the prompted model for all inputs in the batch
-            inputs_prompted = torch.tensor(input_ids).to(device)
-            print("Prompted inputs shape", inputs_prompted.shape)
-
-            log("Computing unprompted logits...", log_path)
-            unprompted_logits = peft_model(inputs_unprompted).logits
-            log("Done computing prompted logits...", log_path)
-
-            log("Computing prompted logits...", log_path)
-            with torch.no_grad(): 
-                prompted_logits = prompted_llm(inputs_prompted).logits[:, -inputs_unprompted.shape[1]:, :]
-            log("Done computing prompted logits...", log_path)
-
-            # Compute KL divergence: KL(prompted, unprompted)
-            kl_div = F.kl_div(F.log_softmax(unprompted_logits, dim=-1), 
-                            F.log_softmax(prompted_logits, dim=-1), 
-                            reduction='batchmean', 
-                            log_target=True)
-            
-            kl_div.backward()
-            optimizer.step()
-            optimizer.zero_grad()
-            log(f"Done computing KL divergence = {kl_div.item()}", log_path)
-
-        print(f"Epoch {epoch} loss: {kl_div.item()}")
-        log(f"Epoch {epoch} loss: {kl_div.item()}", log_path)
+        log("Started validation epoch " + str(epoch), log_path)
+        val_kls = do_epoch(prompted_llm, peft_model, tokenizer,
+                 dataset=val_dataset, 
+                 batch_size=batch_size,
+                 log_path=log_path,
+                 optimizer=optimizer,
+                 do_step=False)
+        # log(f"All validation kls (epoch={epoch}): "+ str(val_kls), log_path)
+        log(f"Validation kl divergence (epoch={epoch}): {sum(val_kls)/len(val_kls)}", log_path)
+        log("Done validation epoch " + str(epoch), log_path)
 
     # save model
     log(f"Saving PEFT model to {out_dir}...", log_path)
