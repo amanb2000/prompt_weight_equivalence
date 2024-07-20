@@ -87,8 +87,9 @@ with open(args.traj_out_file, 'w') as f:
 
             # use the prompt string with the system prompt x0 and the question
             # to generate trajectories
-            input_ids = tokenizer(prompt_q_str, return_tensors="pt").to(model.device)
-            batch_input_ids = input_ids['input_ids'].repeat(num_seq_to_gen, 1)
+            # input_ids = tokenizer(prompt_q_str, return_tensors="pt").to(model.device)
+
+            batch_input_ids = prompt_q_ids.repeat(num_seq_to_gen, 1)
             attention_mask = batch_input_ids.ne(tokenizer.pad_token_id).long()
 
 
@@ -115,17 +116,23 @@ with open(args.traj_out_file, 'w') as f:
                 # Decode the generated sequence
                 generated_text = tokenizer.decode(output[j], skip_special_tokens=False)
 
-                # within generated_text, find prompt_q_str and replace with noprompt_q_str
-                nosys_input_str = generated_text.replace(prompt_q_str, noprompt_q_str)
-                nosys_input_ids = tokenizer(nosys_input_str, return_tensors="pt").to(model.device)['input_ids'][:, 1:]
+                # # within generated_text, find prompt_q_str and replace with noprompt_q_str
+                # nosys_input_str = generated_text.replace(prompt_q_str, noprompt_q_str)
+                # nosys_input_ids = tokenizer(nosys_input_str, return_tensors="pt").to(model.device)['input_ids'][:, 1:]
+
+                # now do the same, but replace outputs[j] such that the subsequence prompt_q_ids becomes noprompt_q_ids
                 # create a dictionary with the required format 
                 # make an attention mask for the input_ids -- no attention to pad tokens 
                 generated_text_mask = torch.ones_like(output[j]) # [num_tokens]
                 generated_text_mask[:batch_input_ids.shape[1]] *= 0
 
+                gen_only = output[j][generated_text_mask == 1] # [num_generated_tokens]
+
+                nosys_input_ids = torch.cat([noprompt_q_ids[0], gen_only], dim=0) # [num_tokens]
+                
                 generated_text_mask[output[j] == tokenizer.eos_token_id] *= 0
 
-                length_diff = output[j].shape[0] - nosys_input_ids.shape[1]
+                length_diff = output[j].shape[0] - nosys_input_ids.shape[0]
 
                 example = {
                     "text": generated_text,  # full prompt + generated text (str)
@@ -135,12 +142,14 @@ with open(args.traj_out_file, 'w') as f:
                     "prompt_text_nosys": noprompt_q_str, # prompt without system prompt (includes question though)
                     "prompt_input_ids": prompt_q_ids[0, :].tolist(), # 
                     "prompt_input_ids_nosys": noprompt_q_ids[0, :].tolist(), # prom
-                    "text_nosys": nosys_input_str, # input ids with no system prompt (str)
-                    "input_ids_nosys": nosys_input_ids[0, :].tolist(), # input ids with no system prompt (ids)
+                    "text_nosys": tokenizer.decode(nosys_input_ids), # input ids with no system prompt (str)
+                    "input_ids_nosys": nosys_input_ids.tolist(), # input ids with no system prompt (ids)
                     "generated_text_mask": generated_text_mask.tolist(), # applies to input_ids
                     "generated_text_mask_nosys": generated_text_mask[length_diff:].tolist() # mask for noprompt_input_ids
                     # "logits": batch_logits[j, :, :].tolist()
                 }
+
+                assert tokenizer.decode(nosys_input_ids[torch.tensor(example["generated_text_mask_nosys"])==1]) == tokenizer.decode(output[j][torch.tensor(example["generated_text_mask"])==1])
 
                 # writ ethe example to the jsonl file 
                 json.dump(example, f)
