@@ -77,7 +77,7 @@ python3 generate_data.py \
     --max_sequence_length 300 \
     --min_sequence_length 100 \
     --temperature 2.0 \
-    --batch_size 32 \
+    --batch_size 64 \
     --traj_out_file data/traj_bluex0_squad_train.jsonl
 
 # generate validation set
@@ -94,7 +94,7 @@ python3 generate_data.py \
 
 # Train blue model 
 python3 train_loop.py \
-    --num_epochs 1000 \
+    --num_epochs 20 \
     --learning_rate 3e-4 \
     --data_path data/traj_bluex0_squad_train.jsonl \
     --val_path data/traj_bluex0_squad_val.jsonl \
