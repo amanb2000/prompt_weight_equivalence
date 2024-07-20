@@ -91,6 +91,23 @@ log("Loading validation dataset", log_path)
 val_dataset = load_dataset('json', data_files=args.val_path)
 log("Validation dataset loaded", log_path)
 
+def pad_list_of_lists(llist, pad_tok_val, verbose=False):
+    """
+    Pads a list of lists with a padding token value.
+    Right padding.
+    """
+    max_len = max([len(l) for l in llist])
+    padded_list = [l + [pad_tok_val] * (max_len - len(l)) for l in llist]
+
+    if verbose: 
+        cnt = 0
+        for l in llist: 
+            if len(l) != max_len: 
+                print(f"Unequal length list at batchel {cnt}: ", l)
+                # print("Padded list: ", padded_list[cnt])
+            cnt += 1
+
+    return padded_list
 
 def do_epoch(prompted_llm, peft_model, tokenizer,
              dataset, 
@@ -105,35 +122,46 @@ def do_epoch(prompted_llm, peft_model, tokenizer,
     for i in tqdm(range(0, len(dataset['train']), batch_size)):
         log(f"Batch {i}", log_path)
         batch = dataset['train'][i:i+batch_size]
-        input_ids = batch['input_ids']
 
-        main_text_ids = [[128000] + x[17:] for x in input_ids]
-        # pad each to max length 
-        max_length = max([len(x) for x in main_text_ids])
-        # use tokenizer.pad_token_id
-        main_text_ids = [x + [tokenizer.pad_token_id]*(max_length-len(x)) for x in main_text_ids]
-        # assert all have the same length 
-        assert all([len(x) == max_length for x in main_text_ids])
 
-        inputs_unprompted = torch.tensor(main_text_ids).to(device)
-        # print("Unprompted inputs shape", inputs_unprompted.shape)
+        # grab the input_ids_nosys to run thru the PEFT model 
+        input_ids_nosys_list_ = batch['input_ids_nosys'] # pad with tokenizer.pad_token_id
+        input_ids_list_ = batch['input_ids'] # pad with tokenizer.pad_token_id
 
-        # pad input_ids to max length 
-        max_length = max([len(x) for x in input_ids])
-        input_ids_padded = [x + [tokenizer.pad_token_id]*(max_length-len(x)) for x in input_ids]
+        input_ids_nosys_list = pad_list_of_lists(input_ids_nosys_list_, tokenizer.pad_token_id, verbose=False)
+        input_ids_list = pad_list_of_lists(input_ids_list_, tokenizer.pad_token_id, verbose=False)
 
-        # Concatenate the prompt to the input for the prompted model for all inputs in the batch
-        inputs_prompted = torch.tensor(input_ids_padded).to(device)
-        # print("Prompted inputs shape", inputs_prompted.shape)
+        # grab masks forr each input_ids
+        mask_nosys_list_ = batch['generated_text_mask_nosys'] # pad with 0
+        mask_list_ = batch['generated_text_mask'] # pad with 0
+
+        mask_nosys_list = pad_list_of_lists(mask_nosys_list_, 0, verbose=False)
+        mask_list = pad_list_of_lists(mask_list_, 0, verbose=False)
+
+
+        device = prompted_llm.device
+        input_ids = torch.tensor(input_ids_list).to(device)
+        input_ids_nosys = torch.tensor(input_ids_nosys_list).to(device)
+        mask = torch.tensor(mask_list).to(device) == 1
+        mask_nosys = torch.tensor(mask_nosys_list).to(device) == 1
+
+        assert input_ids.shape == mask.shape
+        assert input_ids_nosys.shape == mask_nosys.shape
+
+        assert (input_ids[mask] != input_ids_nosys[mask_nosys]).sum() == 0, "Prompted and unprompted input_ids do not match within their respective masks for the generated text (must be identical)"
+        
 
         log("Computing unprompted logits...", log_path)
-        unprompted_logits = peft_model(inputs_unprompted).logits
+        unprompted_logits_ = peft_model(input_ids_nosys).logits
         log("Done computing prompted logits...", log_path)
 
         log("Computing prompted logits...", log_path)
         with torch.no_grad(): 
-            prompted_logits = prompted_llm(inputs_prompted).logits[:, -inputs_unprompted.shape[1]:, :]
+            prompted_logits_ = prompted_llm(input_ids).logits
         log("Done computing prompted logits...", log_path)
+
+        unprompted_logits = unprompted_logits_[mask_nosys, :]
+        prompted_logits = prompted_logits_[mask, :]
 
         # Compute KL divergence: KL(prompted, unprompted)
         kl_div_ = F.kl_div(F.log_softmax(unprompted_logits, dim=-1), 
@@ -141,8 +169,7 @@ def do_epoch(prompted_llm, peft_model, tokenizer,
                         reduction='none', 
                         log_target=True)
         
-        kl_mask = inputs_unprompted != tokenizer.pad_token_id
-        kl_div = kl_div_[kl_mask, :].sum() / batch_size
+        kl_div = kl_div_.sum() / batch_size
         
         kl_div.backward()
         if do_step: 
@@ -224,7 +251,7 @@ if __name__ == "__main__":
     # We are going to backpropagate through the unprompted model and update its weights.
     # The goal is to force the unprompted model to generate the same logits as the prompted model for the tokens that both models see.
 
-
+    best_val_loss = 10000000000
     for epoch in range(num_epochs):
         log("Started epoch " + str(epoch), log_path)
         train_kls = do_epoch(prompted_llm, peft_model, tokenizer,
@@ -249,7 +276,9 @@ if __name__ == "__main__":
         log(f"Validation kl divergence (epoch={epoch}): {sum(val_kls)/len(val_kls)}", log_path)
         log("Done validation epoch " + str(epoch), log_path)
 
-    # save model
-    log(f"Saving PEFT model to {out_dir}...", log_path)
-    peft_model.save_pretrained(out_dir)
-    log(f"Model saved to {out_dir}", log_path)
+        # save model
+        if sum(val_kls)/len(val_kls) < best_val_loss:
+            best_val_loss = sum(val_kls)/len(val_kls)
+            log(f"Saving PEFT model to {out_dir}...", log_path)
+            peft_model.save_pretrained(out_dir)
+            log(f"Model saved to {out_dir}", log_path)
