@@ -60,3 +60,55 @@ python3 train_loop.py --num_epochs 10 \
     --val_path data/val_traj_temp2.0_numq25_numseq25_x0truth_20240718.jsonl \
     --out_dir results/truthful_squad_match_01_ep1000_batch20
 ```
+
+
+## Experiments 2024 07 19
+
+### I'm blue baabaaadeeeebuuuuddaa
+```bash
+# Generate new dataset with improved system prompt management
+# one prompt with all caps, one prompt always mention the color blue in each
+# sentence you generate
+python3 generate_data.py \
+    --x0_file data/blue_x0.md \
+    --question_dataset data/squad_train.jsonl \
+    --num_questions 100 \
+    --num_sequences_per_question 25 \
+    --max_sequence_length 300 \
+    --min_sequence_length 100 \
+    --temperature 2.0 \
+    --batch_size 32 \
+    --traj_out_file data/traj_bluex0_squad_train.jsonl
+
+# generate validation set
+python3 generate_data.py \
+    --x0_file data/blue_x0.md \
+    --question_dataset data/squad_validation.jsonl \
+    --num_questions 25 \
+    --num_sequences_per_question 25 \
+    --max_sequence_length 300 \
+    --min_sequence_length 100 \
+    --temperature 2.0 \
+    --batch_size 32 \
+    --traj_out_file data/traj_bluex0_squad_val.jsonl
+
+# Train blue model 
+python3 train_loop.py \
+    --num_epochs 1000 \
+    --learning_rate 3e-4 \
+    --data_path data/traj_bluex0_squad_train.jsonl \
+    --val_path data/traj_bluex0_squad_val.jsonl \
+    --out_dir results/blue20240719.1
+    --batch_size 32
+```
+
+
+
+
+
+
+
+
+
+
+
