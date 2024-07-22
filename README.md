@@ -105,6 +105,16 @@ python3 train_loop.py \
 
 
 
+## Experiments 2024 07 22
+
+_Planning doc: [(Outline) Prompt-Weight Equivalence](https://docs.google.com/document/d/1zHQ3FQRgFLRznf4EOKSk7E16VuOrw4a-i84KnBxhWsk/edit?usp=sharing)_
+
+
+
+
+
+
+
 
 
 
