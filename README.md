@@ -109,7 +109,18 @@ python3 train_loop.py \
 
 _Planning doc: [(Outline) Prompt-Weight Equivalence](https://docs.google.com/document/d/1zHQ3FQRgFLRznf4EOKSk7E16VuOrw4a-i84KnBxhWsk/edit?usp=sharing)_
 
+```bash
+# Data generation -- createst scripts/commands_datagen_20240722.txt
+bash scripts/datagen_20240722.sh
 
+bash scripts/executor.sh scripts/commands_datagen_20240722.txt 0 7
+bash scripts/executor.sh scripts/commands_datagen_20240722.txt 1 7
+bash scripts/executor.sh scripts/commands_datagen_20240722.txt 2 7
+bash scripts/executor.sh scripts/commands_datagen_20240722.txt 3 7
+bash scripts/executor.sh scripts/commands_datagen_20240722.txt 4 7
+bash scripts/executor.sh scripts/commands_datagen_20240722.txt 5 7
+bash scripts/executor.sh scripts/commands_datagen_20240722.txt 6 7
+```
 
 
 
