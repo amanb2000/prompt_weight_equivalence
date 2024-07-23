@@ -7,7 +7,7 @@ data_dir="data/20240722/"
 
 
 # constants
-batch_size=16
+batch_size=8
 learning_rate="3e-4"
 num_epochs=150
 
