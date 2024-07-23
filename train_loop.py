@@ -109,7 +109,7 @@ def pad_list_of_lists(llist, pad_tok_val, verbose=False):
 
     return padded_list
 
-def do_epoch(prompted_llm, peft_model, tokenizer,
+def do_epoch(peft_model, tokenizer,
              dataset, 
              batch_size, 
              log_path, 
@@ -139,7 +139,7 @@ def do_epoch(prompted_llm, peft_model, tokenizer,
         mask_list = pad_list_of_lists(mask_list_, 0, verbose=False)
 
 
-        device = prompted_llm.device
+        device = peft_model.device
         input_ids = torch.tensor(input_ids_list).to(device)
         input_ids_nosys = torch.tensor(input_ids_nosys_list).to(device)
         mask = torch.tensor(mask_list).to(device) == 1
@@ -149,15 +149,15 @@ def do_epoch(prompted_llm, peft_model, tokenizer,
         assert input_ids_nosys.shape == mask_nosys.shape
 
         assert (input_ids[mask] != input_ids_nosys[mask_nosys]).sum() == 0, "Prompted and unprompted input_ids do not match within their respective masks for the generated text (must be identical)"
-        
 
         log("Computing unprompted logits...", log_path)
         unprompted_logits_ = peft_model(input_ids_nosys).logits
         log("Done computing prompted logits...", log_path)
 
         log("Computing prompted logits...", log_path)
-        with torch.no_grad(): 
-            prompted_logits_ = prompted_llm(input_ids).logits
+        with peft_model.disable_adapter():
+            with torch.no_grad():
+                prompted_logits_ = peft_model(input_ids).logits
         log("Done computing prompted logits...", log_path)
 
         unprompted_logits = unprompted_logits_[mask_nosys, :]
@@ -227,18 +227,6 @@ if __name__ == "__main__":
     peft_model.print_trainable_parameters()
     log("PEFT model loaded", log_path)
 
-
-    pipeline_prompted_llm = transformers.pipeline(
-        "text-generation",
-        model=model_name,
-        tokenizer=tokenizer,
-        torch_dtype=torch.bfloat16,
-        trust_remote_code=True,
-        device_map="auto"
-    )
-    prompted_llm = pipeline_prompted_llm.model
-    prompted_llm.eval()
-
     device = model.device
 
     optimizer = torch.optim.Adam(peft_model.parameters(), lr=learning_rate)
@@ -254,7 +242,7 @@ if __name__ == "__main__":
     best_val_loss = 10000000000
     for epoch in range(num_epochs):
         log("Started epoch " + str(epoch), log_path)
-        train_kls = do_epoch(prompted_llm, peft_model, tokenizer,
+        train_kls = do_epoch(peft_model, tokenizer,
                  dataset=dataset, 
                  batch_size=batch_size,
                  log_path=log_path,
@@ -266,7 +254,7 @@ if __name__ == "__main__":
         log("Done epoch " + str(epoch), log_path)
 
         log("Started validation epoch " + str(epoch), log_path)
-        val_kls = do_epoch(prompted_llm, peft_model, tokenizer,
+        val_kls = do_epoch(peft_model, tokenizer,
                  dataset=val_dataset, 
                  batch_size=batch_size,
                  log_path=log_path,
