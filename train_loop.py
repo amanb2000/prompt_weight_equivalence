@@ -24,38 +24,39 @@ import pdb
 # out_dir = "results/traj_lex_01"
 
 # Set up argument parser
-parser = argparse.ArgumentParser(description="Script for training model with specified parameters")
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Script for training model with specified parameters")
 
-# Add arguments with defaults
-parser.add_argument('--num_epochs', type=int, default=1000, help='Number of epochs to train the model. Default = 1000')
-parser.add_argument('--batch_size', type=int, default=10, help='Batch size for training. Default = 10')
-parser.add_argument('--learning_rate', type=float, default=1e-4, help='Learning rate for optimizer. Default = 1e-4')
-parser.add_argument('--device', type=str, default="cuda" if torch.cuda.is_available() else "cpu", help='Device to run the training on. Default = "cuda" if available, else "cpu"')
-parser.add_argument('--data_path', type=str, default="data/traj_lex_nseq1000_maxlen300_minlen100_temp2.0.jsonl", help='Path to the training data. Default = "data/train_traj_temp2.0_numq100_numseq25_x0truth_20240718.jsonl"')
-parser.add_argument('--val_path', type=str, default="data/traj_lex_nseq1000_maxlen300_minlen100_temp2.0.jsonl", help='Path to the validation data. Default = "data/val_traj_temp2.0_numq25_numseq25_x0truth_20240718.jsonl"')
-parser.add_argument('--out_dir', type=str, default="results/traj_lex_01", help='Output directory for results. Default = "results/traj_lex_01"')
+    # Add arguments with defaults
+    parser.add_argument('--num_epochs', type=int, default=1000, help='Number of epochs to train the model. Default = 1000')
+    parser.add_argument('--batch_size', type=int, default=10, help='Batch size for training. Default = 10')
+    parser.add_argument('--learning_rate', type=float, default=1e-4, help='Learning rate for optimizer. Default = 1e-4')
+    parser.add_argument('--device', type=str, default="cuda" if torch.cuda.is_available() else "cpu", help='Device to run the training on. Default = "cuda" if available, else "cpu"')
+    parser.add_argument('--data_path', type=str, default="data/traj_lex_nseq1000_maxlen300_minlen100_temp2.0.jsonl", help='Path to the training data. Default = "data/train_traj_temp2.0_numq100_numseq25_x0truth_20240718.jsonl"')
+    parser.add_argument('--val_path', type=str, default="data/traj_lex_nseq1000_maxlen300_minlen100_temp2.0.jsonl", help='Path to the validation data. Default = "data/val_traj_temp2.0_numq25_numseq25_x0truth_20240718.jsonl"')
+    parser.add_argument('--out_dir', type=str, default="results/traj_lex_01", help='Output directory for results. Default = "results/traj_lex_01"')
 
-# Parse arguments
-args = parser.parse_args()
+    # Parse arguments
+    args = parser.parse_args()
 
-# Assign variables
-num_epochs = args.num_epochs
-batch_size = args.batch_size
-learning_rate = args.learning_rate
-device = args.device
-data_path = args.data_path
-out_dir = args.out_dir
+    # Assign variables
+    num_epochs = args.num_epochs
+    batch_size = args.batch_size
+    learning_rate = args.learning_rate
+    device = args.device
+    data_path = args.data_path
+    out_dir = args.out_dir
 
-# Ensure the output directory exists
-os.makedirs(out_dir, exist_ok=True)
+    # Ensure the output directory exists
+    os.makedirs(out_dir, exist_ok=True)
 
-# Save arguments to a JSON file in the output directory
-args_dict = vars(args)
-args_json_path = os.path.join(out_dir, 'args.json')
-with open(args_json_path, 'w') as f:
-    json.dump(args_dict, f, indent=4)
+    # Save arguments to a JSON file in the output directory
+    args_dict = vars(args)
+    args_json_path = os.path.join(out_dir, 'args.json')
+    with open(args_json_path, 'w') as f:
+        json.dump(args_dict, f, indent=4)
 
-print(f"Arguments saved to {args_json_path}")
+    print(f"Arguments saved to {args_json_path}")
 
 
 
@@ -64,32 +65,31 @@ print(f"Arguments saved to {args_json_path}")
 
 # make the out_dir if it doesn't already exist 
 import os
-if not os.path.exists(out_dir):
-    os.makedirs(out_dir)
 def log(msg, file_path): 
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with open(file_path, 'a') as f: 
         f.write(f"[{current_time}] {msg}\n")
 
-log_path = os.path.join(out_dir, "train_loop.log")
 
-# TODO Load dataset here
-# dataset = []
-# with open(data_path, "r") as f:
-#     for line in f:
-#         newline_str = line.strip()
-#         newline_dict = eval(newline_str)
-#         dataset.append(newline_dict)
 
-# Load the dataset from the JSONL file
-log("Loading dataset", log_path)
-dataset = load_dataset('json', data_files=data_path)
-log("Dataset loaded", log_path)
+if __name__ == "__main__":
+    if not os.path.exists(out_dir):
+        os.makedirs(out_dir)
 
-# load validation dataset
-log("Loading validation dataset", log_path) 
-val_dataset = load_dataset('json', data_files=args.val_path)
-log("Validation dataset loaded", log_path)
+    log_path = os.path.join(out_dir, "train_loop.log")
+
+    # TODO Load dataset here
+    # Load the dataset from the JSONL file
+    log("Loading dataset", log_path)
+    dataset = load_dataset('json', data_files=data_path)
+    log("Dataset loaded", log_path)
+
+    # load validation dataset
+    log("Loading validation dataset", log_path) 
+    val_dataset = load_dataset('json', data_files=args.val_path)
+    log("Validation dataset loaded", log_path)
+
+
 
 def pad_list_of_lists(llist, pad_tok_val, verbose=False):
     """
