@@ -135,6 +135,14 @@ bash scripts/executor.sh scripts/train_loop_commands_20240722.txt 6 7
 ```
 
 
+## Comparison Script 2024 07 23
+
+```bash
+python3 compare_models.py \
+    --results_dir results/20240722/traj_always_rhyme_x0_squad_ep150 \
+    --x0_override data/blue_x0.md
+```
+
 
 
 
