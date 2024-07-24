@@ -8,3 +8,6 @@ seaborn
 transformers
 datasets
 peft
+
+plotly
+tqdm
