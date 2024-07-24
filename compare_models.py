@@ -45,7 +45,9 @@ def parse_args():
     parser = argparse.ArgumentParser(description='Compare trained model to prompted model')
     parser.add_argument('--results_dir', type=str, required=True, help='Location of trained model, as given in --out_dir in train_loop.py.')
     parser.add_argument('--data_file', type=str, default="NONE", help='Location of .jsonl dataset. If NONE, we will pull the args.json from results_dir and use the validation dataset specified there.')
-    parser.add_argument("--batch_size", type=int, default=8, help="Batch size for computing log likelihoods.")
+    parser.add_argument('--x0_override', type=str, default=None, help="Path to a .md file containing the string for the x0 (system prompt) override. This will be 'surgically inserted' between the <|start_header_id|>system<|end_header_id|>\n\n[--x0_override GOES HERE]<|eot_id|>\n<|start_header_id|>user<|end_header_id|>. THIS ONLY WORKS FOR LLAMA-3 MODELS AND OTHER MODELS WITH THE SAME TOKENIZER AND PROMPT FORMAT.")
+    parser.add_argument('--path_prefix', type=str, default=None, help="Prefix for saved files. Helpful for clarifying if you used --x0_override. The rest of the saved figures names will specify only whether it's the PEFT model or the base model and whether it is prompted or unprompted.")
+    parser.add_argument("--batch_size", type=int, default=8, help="Batch size for computing log likelihoods. Default=8.")
     args =  parser.parse_args()
 
     # pretty print args 
@@ -55,9 +57,9 @@ def parse_args():
     
     return args
 
-def log(msg, file_path): 
+def log(msg): 
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    with open(file_path, 'a') as f: 
+    with open(log.log_path, 'a') as f: # log_path is a function attribute of log.
         f.write(f"[{current_time}] {msg}\n")
 
 
@@ -103,13 +105,48 @@ def get_models(results_dir, device='cuda'):
     return base_model, peft_model, tokenizer
 
 
+def get_x0_override(x0_override_path, tokenizer): 
+    # get the string and the input_ids WITH NO BOS OR EOS TOKENS 
+    with open(x0_override_path, 'r') as f: 
+        x0_str = f.read()
+
+    log(f"Loaded x0_str='{x0_str}' from {x0_override_path}")
+
+    # tokenize the x0_str
+    x0_list = tokenizer(x0_str)['input_ids'] # this is a 1-d list
+    log(f"x0_list is: {x0_list}")
+
+    # remove the BOS and EOS tokens -- any tokens in tokenizer.special_tokens.
+    x0_list = [x for x in x0_list if x not in (128000, 128001, 128009)]
+
+    log(f"After removing BOS and EOS tokens, x0_list is: '{x0_list}'")
+    log(f"After removing BOS and EOS tokens, tokenizer.decode(x0_str) = '{tokenizer.decode(x0_list)}'")
+    pdb.set_trace()
+
+    return x0_str, x0_list
+
+
+def transplant_x0(x0_list, input_ids_list, mask_list, tokenizer):
+    """ Surgically implants x0_list into input_ids_list and mask_list to replace 
+    the existing text encased in the <|start_header_id|>system<|end_header_id|> 
+    and <|start_header_id|>user<|end_header_id|> tokens.
+    """
+    pdb.set_trace()
+    assert len(input_ids_list) == len(mask_list), "input_ids_list and mask_list must have the same length"
+
+    system_tokens = tokenizer.encode("<|start_header_id|>system<|end_header_id|>")['input_ids']
+
+
+    for i in range(len(input_ids_list)):
+        # locate the system and user tokens.
+    
 
 def get_loss(prompted_llm, peft_model, tokenizer,
              dataset, 
              batch_size, 
-             log_path, 
              optimizer, 
-             do_step = True):
+             do_step = True, 
+             x0_override = None):
     """
     Gets the loss for {prompted_llm, peft_model} on the {prompted, unprompted} 
     inputs_ids from a dataset. 
@@ -119,6 +156,12 @@ def get_loss(prompted_llm, peft_model, tokenizer,
     """
     print("peft model device: ", peft_model.device)
     print("prompted model device: ", prompted_llm.device)
+
+    if x0_override is not None:
+        log(f"Using x0_override from {x0_override}")
+        x0_str, x0_list = get_x0_override(x0_override, tokenizer)
+
+
     unprompted_logits_peft_losses = []
     unprompted_logits_base_losses = []
     prompted_logits_peft_losses = []
@@ -141,6 +184,18 @@ def get_loss(prompted_llm, peft_model, tokenizer,
 
         mask_nosys_list = pad_list_of_lists(mask_nosys_list_, 0, verbose=False)
         mask_list = pad_list_of_lists(mask_list_, 0, verbose=False)
+
+        # If the user specified --x0_override, we will insert the override into 
+        # input_ids_list and mask_list. 
+        # The override WILL NOT be applied to input_ids_nosys_list and mask_nosys_list. 
+        # 
+        # We can ensure that the override is applied to the correct indices by 
+        # comparing input_ids[mask] with input_ids_nosys[mask_nosys]. 
+        # Recall that the mask selects for only the tokens in the trajectory 
+        # (i.e., the generated text and not the system prompt x0).
+
+        if x0_override is not None:
+            input_ids_list, mask = transplant_x0(x0_list, input_ids_list, mask_list, tokenizer)
 
 
         device = prompted_llm.device
@@ -171,7 +226,8 @@ def get_loss(prompted_llm, peft_model, tokenizer,
         # 
         # We must retain the batch dimension, such that we have one 
         # list element in unprompted_logits_peft_losses ... text for every 
-        # dataset element
+        # dataset element.
+        # 
         # Calculate losses
         unprompted_peft_loss = F.cross_entropy(unprompted_logits_peft.transpose(1, 2), input_ids_nosys[:, 1:], reduction='none')
         unprompted_base_loss = F.cross_entropy(unprompted_logits_base.transpose(1, 2), input_ids_nosys[:, 1:], reduction='none')
@@ -218,8 +274,8 @@ def get_dataset_from_args(args):
     return dataset, data_file
 
 
-def draw_graphs(res_dict, results_dir, log_path, hash=""):
-    log("Drawing graphs", log_path)
+def draw_graphs(res_dict, results_dir, hash=""):
+    log("Drawing graphs")
     df = pd.DataFrame(res_dict)
 
     # UP_peft, P_base
@@ -227,7 +283,7 @@ def draw_graphs(res_dict, results_dir, log_path, hash=""):
     # title 
     fig.update_layout(title=f'Unprompted PEFT vs Prompted Base -- {hash}')
     # save fig
-    fig.write_html(os.path.join(results_dir, f"{hash}up_peft_vs_p_base.html"))
+    fig.write_html(os.path.join(results_dir, f"{hash}_up_peft_vs_p_base.html"))
 
 
     # P_peft, P_base
@@ -235,7 +291,7 @@ def draw_graphs(res_dict, results_dir, log_path, hash=""):
     # title
     fig.update_layout(title=f'Prompted PEFT vs. Prompted Base-- {hash}')
     # save fig
-    fig.write_html(os.path.join(results_dir, f"{hash}p_peft_vs_p_base.html"))
+    fig.write_html(os.path.join(results_dir, f"{hash}_p_peft_vs_p_base.html"))
 
 
     # UP_peft UP_base
@@ -243,7 +299,7 @@ def draw_graphs(res_dict, results_dir, log_path, hash=""):
     # title
     fig.update_layout(title=f'Unprompted PEFT vs Unprompted Base -- {hash}')
     # save fig
-    fig.write_html(os.path.join(results_dir, f"{hash}up_peft_vs_p_base.html"))
+    fig.write_html(os.path.join(results_dir, f"{hash}_up_peft_vs_p_base.html"))
 
 
     # P_peft UP_base
@@ -251,7 +307,7 @@ def draw_graphs(res_dict, results_dir, log_path, hash=""):
     # title
     fig.update_layout(title=f'Prompted PEFT vs Unprompted Base -- {hash}')
     # save fig
-    fig.write_html(os.path.join(results_dir, f"{hash}p_peft_vs_up_base.html"))
+    fig.write_html(os.path.join(results_dir, f"{hash}_p_peft_vs_up_base.html"))
 
 
     # P_peft, UP_peft
@@ -259,7 +315,7 @@ def draw_graphs(res_dict, results_dir, log_path, hash=""):
     # title
     fig.update_layout(title=f'Prompted PEFT vs Unprompted PEFT -- {hash}')
     # save fig
-    fig.write_html(os.path.join(results_dir, f"{hash}p_peft_vs_up_peft.html"))
+    fig.write_html(os.path.join(results_dir, f"{hash}_p_peft_vs_up_peft.html"))
 
 
     # P_base, UP_base 
@@ -267,11 +323,11 @@ def draw_graphs(res_dict, results_dir, log_path, hash=""):
     # title
     fig.update_layout(title=f'Prompted Base vs Unprompted Base -- {hash}')
     # save fig
-    fig.write_html(os.path.join(results_dir, f"{hash}p_base_vs_up_base.html"))
+    fig.write_html(os.path.join(results_dir, f"{hash}_p_base_vs_up_base.html"))
 
 
 
-    log("Done drawing graphs", log_path)
+    log("Done drawing graphs")
 
     
 
@@ -280,38 +336,43 @@ def main():
     args = parse_args()
 
     # log setup 
-    log_path = os.path.join(args.results_dir, "compare_models.log")
+    log.log_path = os.path.join(args.results_dir, "compare_models.log")
 
-    # get the models
-    log(f"Getting models from {args.results_dir}", log_path)
-    base_model, peft_model, tokenizer = get_models(args.results_dir)
-    log("Done getting models.", log_path)
-    
     # get the dataset
-    log(f"Getting dataset from {args.data_file}", log_path)
+    log(f"Getting dataset from {args.data_file}")
     dataset, dataset_path = get_dataset_from_args(args)
-    log("Done getting dataset.", log_path)
+    log("Done getting dataset.")
 
     # get the md5sum of dataset_path
-    log("Computing md5sum of dataset", log_path)
-    md5sum = os.path.splitext(os.path.basename(dataset_path))[0]
-    log(f"md5sum: {md5sum}", log_path)
+    log("Computing md5sum of dataset")
+    path_prefix = os.path.splitext(os.path.basename(dataset_path))[0] 
+    if args.x0_override is not None:
+        path_prefix += os.path.splitext(os.path.basename(args.x0_override))[0]
+    log(f"path_prefix: {path_prefix}")
+
+
+
+    # get the models
+    log(f"Getting models from {args.results_dir}")
+    base_model, peft_model, tokenizer = get_models(args.results_dir)
+    log("Done getting models.")
 
     # compute the log likelihoods
-    log("Computing log likelihoods", log_path)
+    log("Computing log likelihoods")
     res_dict = get_loss(base_model, peft_model, tokenizer, dataset, 
-                        batch_size=args.batch_size, log_path=log_path, optimizer=None, do_step=False)
-    log("Done computing log likelihoods", log_path)
+                        batch_size=args.batch_size, optimizer=None, do_step=False, 
+                        x0_override=args.x0_override)
+    log("Done computing log likelihoods")
 
     # save the results
-    log("Saving results", log_path)
-    res_path = os.path.join(args.results_dir, "compare_models_results.json")
+    res_path = os.path.join(args.results_dir, f"{path_prefix}_compare_models_results.json")
+    log(f"Saving all losses for all questions to {res_path}")
     with open(res_path, 'w') as f: 
         json.dump(res_dict, f)
-    log("Done saving results", log_path)
+    log("Done saving results")
 
     # draw the scatter plots
-    draw_graphs(res_dict, args.results_dir, log_path, hash=md5sum)
+    draw_graphs(res_dict, args.results_dir, hash=path_prefix)
 
 if __name__ == "__main__": 
     main()
