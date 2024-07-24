@@ -235,8 +235,6 @@ def get_loss(prompted_llm, peft_model, tokenizer,
         assert input_ids_nosys.shape == mask_nosys.shape
 
         assert (input_ids[mask] != input_ids_nosys[mask_nosys]).sum() == 0, "Prompted and unprompted input_ids do not match within their respective masks for the generated text (must be identical)"
-        
-
 
         with torch.no_grad(): 
             unprompted_logits_peft = peft_model(input_ids_nosys).logits[:, :-1, :]
@@ -288,6 +286,91 @@ def get_loss(prompted_llm, peft_model, tokenizer,
         'lengths': lengths,
         'texts': texts
     }
+
+def compute_deviance(prompted_llm, peft_model, tokenizer, dataset, batch_size, device='cuda'):
+    """ 
+    Get logits for {prompted_llm, peft_model} on the {prompted, unprompted} 
+    inputs_ids from a dataset. 
+
+    We retain the batch dimension so that we have the loss for every individual 
+    entry in the dataset
+    """
+
+    delta = {}
+    delta_prime = {}
+    for j in tqdm(range(0, len(dataset['train']), batch_size)):
+        batch = dataset['train'][j:j+batch_size]
+        # grab the input_ids_nosys to run thru the PEFT model 
+        input_ids_nosys_list_ = batch['input_ids_nosys'] # pad with tokenizer.pad_token_id
+        input_ids_list_ = batch['input_ids'] # pad with tokenizer.pad_token_id
+
+        input_ids_nosys_list = pad_list_of_lists(input_ids_nosys_list_, tokenizer.pad_token_id, verbose=False)
+        input_ids_list = pad_list_of_lists(input_ids_list_, tokenizer.pad_token_id, verbose=False)
+
+        # grab masks forr each input_ids
+        mask_nosys_list_ = batch['generated_text_mask_nosys'] # pad with 0
+        mask_list_ = batch['generated_text_mask'] # pad with 0
+
+        mask_nosys_list = pad_list_of_lists(mask_nosys_list_, 0, verbose=False)
+        mask_list = pad_list_of_lists(mask_list_, 0, verbose=False)
+        unprompted_masks = mask_nosys_list
+        prompted_masks = mask_list
+        unprompted_masks_tensor = torch.tensor(unprompted_masks).to(device)
+        prompted_masks_tensor = torch.tensor(prompted_masks).to(device)
+
+        device = prompted_llm.device
+        input_ids = torch.tensor(input_ids_list).to(device)
+        input_ids_nosys = torch.tensor(input_ids_nosys_list).to(device)
+
+        with torch.no_grad(): 
+            unprompted_logits_peft = peft_model(input_ids_nosys).logits
+            unprompted_logits_base = prompted_llm(input_ids_nosys).logits
+
+            prompted_logits_peft = peft_model(input_ids).logits
+            prompted_logits_base = prompted_llm(input_ids).logits
+
+        max_len_sequence = max(sum(x) for x in mask_list)
+        unprompted_start_idx = (torch.arange(0, input_ids.shape[0]).to(prompted_llm.device), unprompted_masks_tensor.argmax(dim=1).to(prompted_llm.device))
+        prompted_start_idx = (torch.arange(0, input_ids.shape[0]).to(prompted_llm.device), prompted_masks_tensor.argmax(dim=1).to(prompted_llm.device))
+        
+
+        for i in range(max_len_sequence):
+            if unprompted_start_idx[1].max() >= unprompted_logits_peft.shape[1] or prompted_start_idx[1].max() >= prompted_logits_peft.shape[1]:
+                # Any of the start indices are out of bounds, remove them from unprompted_start_idx and prompted_start_idx
+                unprompted_start_idx = (unprompted_start_idx[0][unprompted_start_idx[1] < unprompted_logits_peft.shape[1]], unprompted_start_idx[1][unprompted_start_idx[1] < unprompted_logits_peft.shape[1]])
+                prompted_start_idx = (prompted_start_idx[0][prompted_start_idx[1] < prompted_logits_peft.shape[1]], prompted_start_idx[1][prompted_start_idx[1] < prompted_logits_peft.shape[1]])
+
+                # assert resulting shapes are the same
+                assert unprompted_start_idx[0].shape == prompted_start_idx[0].shape
+                assert unprompted_start_idx[1].shape == prompted_start_idx[1].shape
+                assert unprompted_start_idx[0].shape == unprompted_start_idx[1].shape
+                assert prompted_start_idx[0].shape == prompted_start_idx[1].shape
+
+            delta_prime_i_batch = F.kl_div(F.log_softmax(unprompted_logits_peft[unprompted_start_idx], dim=-1),
+                                        F.log_softmax(unprompted_logits_base[unprompted_start_idx], dim=-1),
+                                        reduction='none',
+                                        log_target=True).sum(dim=-1)
+
+            delta_i_batch = F.kl_div(F.log_softmax(prompted_logits_base[prompted_start_idx], dim=-1),
+                                F.log_softmax(unprompted_logits_base[unprompted_start_idx], dim=-1),
+                                reduction='none',
+                                log_target=True).sum(dim=-1)        
+
+            # Mask batch elements where mask is 0
+            delta_i_masked = delta_i_batch[unprompted_masks_tensor[unprompted_start_idx] == 1]
+            delta_prime_i_masked = delta_prime_i_batch[unprompted_masks_tensor[unprompted_start_idx] == 1]
+
+            if (unprompted_masks_tensor[unprompted_start_idx] == 0).any() and i == 0:
+                pdb.set_trace()
+
+            # Append each element of the batch to the main dict
+            delta[i] = delta.get(i, []) + delta_i_masked.cpu().tolist()
+            delta_prime[i] = delta_prime.get(i, []) + delta_prime_i_masked.cpu().tolist()
+
+            unprompted_start_idx = (unprompted_start_idx[0], unprompted_start_idx[1] + 1)
+            prompted_start_idx = (prompted_start_idx[0], prompted_start_idx[1] + 1)
+
+    return delta, delta_prime
 
 
 def get_dataset_from_args(args):
@@ -356,7 +439,33 @@ def draw_graphs(res_dict, results_dir, hash=""):
 
     log("Done drawing graphs")
 
-    
+def draw_graphs_deviance(prompted_llm, peft_model, tokenizer, dataset, batch_size, results_dir, hash=""):
+    log("Computing deviance")
+    delta_dict, delta_prime_dict = compute_deviance(prompted_llm, peft_model, tokenizer, dataset, batch_size)
+    log("Done computing deviance")
+
+    pdb.set_trace()
+
+    delta_avg_list = []
+    delta_prime_avg_list = []
+    for i in range(len(delta_dict)):
+        delta_avg_list.append(sum(delta_dict[i]) / len(delta_dict[i]))
+        delta_prime_avg_list.append(sum(delta_prime_dict[i]) / len(delta_prime_dict[i]))
+
+    pdb.set_trace()
+
+    # Draw the graph
+    df = pd.DataFrame({
+        'delta': delta_avg_list,
+        'delta_prime': delta_prime_avg_list
+    })
+
+    # Draw a single plot with two lines on it
+
+    fig = px.line(df, x=df.index, y=['delta', 'delta_prime'])
+    fig.update_layout(title=f'Deviance -- {hash}')
+    fig.write_html(os.path.join(results_dir, f"{hash}_deviance.html"))
+
 
 def main(): 
     # parse args
@@ -401,5 +510,22 @@ def main():
     # draw the scatter plots
     draw_graphs(res_dict, args.results_dir, hash=path_prefix)
 
+def main_deviance():
+    args = parse_args()
+    log.log_path = os.path.join(args.results_dir, "compare_models.log")
+    log(f"Getting dataset from {args.data_file}")
+    dataset, dataset_path = get_dataset_from_args(args)
+    log("Done getting dataset.")
+
+    log(f"Getting models from {args.results_dir}")
+    base_model, peft_model, tokenizer = get_models(args.results_dir)
+    log("Done getting models.")
+
+
+    draw_graphs_deviance(base_model, peft_model, tokenizer, dataset, args.batch_size, args.results_dir, hash=os.path.basename(dataset_path))
+
+
+
 if __name__ == "__main__": 
-    main()
+    # main()
+    main_deviance()
