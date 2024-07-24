@@ -121,7 +121,6 @@ def get_x0_override(x0_override_path, tokenizer):
 
     log(f"After removing BOS and EOS tokens, x0_list is: '{x0_list}'")
     log(f"After removing BOS and EOS tokens, tokenizer.decode(x0_str) = '{tokenizer.decode(x0_list)}'")
-    pdb.set_trace()
 
     return x0_str, x0_list
 
@@ -131,14 +130,42 @@ def transplant_x0(x0_list, input_ids_list, mask_list, tokenizer):
     the existing text encased in the <|start_header_id|>system<|end_header_id|> 
     and <|start_header_id|>user<|end_header_id|> tokens.
     """
-    pdb.set_trace()
     assert len(input_ids_list) == len(mask_list), "input_ids_list and mask_list must have the same length"
 
-    system_tokens = tokenizer.encode("<|start_header_id|>system<|end_header_id|>")['input_ids']
+    # FOR FUTURE REFERENCE -- we used the following tokens to encode the system and user prompts. 
+    # follows from the generate_dataset.py output format. 
+    # 
+    # [1:] gets rid of the BOS token
+    # system_tokens = tokenizer.encode("<|start_header_id|>system<|end_header_id|>\n\n")[1:]
+    # user_tokens = tokenizer.encode("<|eot_id|>\n<|start_header_id|>user<|end_header_id|>")[1:]
+
+    system_tokens = [128006, 9125, 128007, 271] # use system_tokens[:-1] for lazy people who don't include \n\n
+    user_tokens = [128009, 198, 128006, 882, 128007] # use user_tokens[2:] for lazy people who don't include <|eot_id|>\n 
 
 
     for i in range(len(input_ids_list)):
-        # locate the system and user tokens.
+        assert len(input_ids_list[i]) == len(mask_list[i]), f"input_ids_list[{i}] and mask_list[{i}] must have the same length"
+        # find the index of system_tokens inside input_ids_list[i]
+        system_end = None
+        for j in range(len(input_ids_list[i])):
+            if input_ids_list[i][j:j+len(system_tokens)] == system_tokens:
+                system_end = j+len(system_tokens)
+                break
+        
+        assert system_end is not None, "Could not find system_tokens in input_ids_list"
+
+        user_start = None 
+        for j in range(system_end, len(input_ids_list[i])):
+            if input_ids_list[i][j:j+len(user_tokens)] == user_tokens:
+                user_start = j
+                break
+        
+        assert user_start is not None, "Could not find user_tokens in input_ids_list"
+
+        input_ids_list[i] = input_ids_list[i][:system_end] + x0_list + input_ids_list[i][user_start:]
+        mask_list[i] = mask_list[i][:system_end] + [0]*len(x0_list) + mask_list[i][user_start:]
+
+    return input_ids_list, mask_list
     
 
 def get_loss(prompted_llm, peft_model, tokenizer,
@@ -193,10 +220,10 @@ def get_loss(prompted_llm, peft_model, tokenizer,
         # comparing input_ids[mask] with input_ids_nosys[mask_nosys]. 
         # Recall that the mask selects for only the tokens in the trajectory 
         # (i.e., the generated text and not the system prompt x0).
+        # This is done below once we convert to tensors.
 
         if x0_override is not None:
-            input_ids_list, mask = transplant_x0(x0_list, input_ids_list, mask_list, tokenizer)
-
+            input_ids_list, mask_list = transplant_x0(x0_list, input_ids_list, mask_list, tokenizer)
 
         device = prompted_llm.device
         input_ids = torch.tensor(input_ids_list).to(device)
@@ -299,7 +326,7 @@ def draw_graphs(res_dict, results_dir, hash=""):
     # title
     fig.update_layout(title=f'Unprompted PEFT vs Unprompted Base -- {hash}')
     # save fig
-    fig.write_html(os.path.join(results_dir, f"{hash}_up_peft_vs_p_base.html"))
+    fig.write_html(os.path.join(results_dir, f"{hash}_up_peft_vs_up_base.html"))
 
 
     # P_peft UP_base
@@ -347,7 +374,7 @@ def main():
     log("Computing md5sum of dataset")
     path_prefix = os.path.splitext(os.path.basename(dataset_path))[0] 
     if args.x0_override is not None:
-        path_prefix += os.path.splitext(os.path.basename(args.x0_override))[0]
+        path_prefix += "_X0OVERRIDE"+os.path.splitext(os.path.basename(args.x0_override))[0]+"_"
     log(f"path_prefix: {path_prefix}")
 
 
