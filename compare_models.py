@@ -392,6 +392,10 @@ def draw_graphs(res_dict, results_dir, hash=""):
     fig = px.scatter(df, x='unprompted_logits_peft_losses', y='prompted_logits_base_losses', color='lengths')
     # title 
     fig.update_layout(title=f'Unprompted PEFT vs Prompted Base -- {hash}')
+    # figure bounds 0-8 
+    fig.update_xaxes(range=[0, 8])
+    fig.update_yaxes(range=[0, 8])
+
     # save fig
     fig.write_html(os.path.join(results_dir, f"{hash}_up_peft_vs_p_base.html"))
 
@@ -400,6 +404,9 @@ def draw_graphs(res_dict, results_dir, hash=""):
     fig = px.scatter(df, x='prompted_logits_peft_losses', y='prompted_logits_base_losses', color='lengths')
     # title
     fig.update_layout(title=f'Prompted PEFT vs. Prompted Base-- {hash}')
+    # figure bounds 0-8 
+    fig.update_xaxes(range=[0, 8])
+    fig.update_yaxes(range=[0, 8])
     # save fig
     fig.write_html(os.path.join(results_dir, f"{hash}_p_peft_vs_p_base.html"))
 
@@ -408,6 +415,9 @@ def draw_graphs(res_dict, results_dir, hash=""):
     fig = px.scatter(df, x='unprompted_logits_peft_losses', y='unprompted_logits_base_losses', color='lengths')
     # title
     fig.update_layout(title=f'Unprompted PEFT vs Unprompted Base -- {hash}')
+    # figure bounds 0-8 
+    fig.update_xaxes(range=[0, 8])
+    fig.update_yaxes(range=[0, 8])
     # save fig
     fig.write_html(os.path.join(results_dir, f"{hash}_up_peft_vs_up_base.html"))
 
@@ -416,6 +426,9 @@ def draw_graphs(res_dict, results_dir, hash=""):
     fig = px.scatter(df, x='prompted_logits_peft_losses', y='unprompted_logits_base_losses', color='lengths')
     # title
     fig.update_layout(title=f'Prompted PEFT vs Unprompted Base -- {hash}')
+    # figure bounds 0-8 
+    fig.update_xaxes(range=[0, 8])
+    fig.update_yaxes(range=[0, 8])
     # save fig
     fig.write_html(os.path.join(results_dir, f"{hash}_p_peft_vs_up_base.html"))
 
@@ -424,6 +437,9 @@ def draw_graphs(res_dict, results_dir, hash=""):
     fig = px.scatter(df, x='prompted_logits_peft_losses', y='unprompted_logits_peft_losses', color='lengths')
     # title
     fig.update_layout(title=f'Prompted PEFT vs Unprompted PEFT -- {hash}')
+    # figure bounds 0-8 
+    fig.update_xaxes(range=[0, 8])
+    fig.update_yaxes(range=[0, 8])
     # save fig
     fig.write_html(os.path.join(results_dir, f"{hash}_p_peft_vs_up_peft.html"))
 
@@ -432,6 +448,9 @@ def draw_graphs(res_dict, results_dir, hash=""):
     fig = px.scatter(df, x='prompted_logits_base_losses', y='unprompted_logits_base_losses', color='lengths')
     # title
     fig.update_layout(title=f'Prompted Base vs Unprompted Base -- {hash}')
+    # figure bounds 0-8 
+    fig.update_xaxes(range=[0, 8])
+    fig.update_yaxes(range=[0, 8])
     # save fig
     fig.write_html(os.path.join(results_dir, f"{hash}_p_base_vs_up_base.html"))
 
