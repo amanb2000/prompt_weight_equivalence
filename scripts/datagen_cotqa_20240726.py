@@ -21,28 +21,27 @@ import os
 import pdb
 
 # get the list of x0 files from data/*_x0.md
-question_dataset__x0_file = [
-    ("data/aqua_validation.jsonl", "data/cot_math_aqua-mathqa_x0.md"),
-    ("data/aqua_train.jsonl", "data/cot_math_aqua-mathqa_x0.md"),
+question_dataset__x0_file__numq = [
+    ("data/aqua_validation.jsonl", "data/cot_math_aqua-mathqa_x0.md", 200),
+    ("data/aqua_train.jsonl", "data/cot_math_aqua-mathqa_x0.md", 500),
 
-    ("data/mathqa_validation.jsonl", "data/cot_math_aqua-mathqa_x0.md"),
-    ("data/mathqa_train.jsonl", "data/cot_math_aqua-mathqa_x0.md"),
+    ("data/mathqa_validation.jsonl", "data/cot_math_aqua-mathqa_x0.md", 200),
+    ("data/mathqa_train.jsonl", "data/cot_math_aqua-mathqa_x0.md", 500),
 
-    ("data/asdiv_validation.jsonl", "data/cot_math_x0.md"), 
-    ("data/asdiv_train.jsonl", "data/cot_math_x0.md"),
+    ("data/asdiv_validation.jsonl", "data/cot_math_x0.md", 200), 
+    ("data/asdiv_train.jsonl", "data/cot_math_x0.md", 500),
 
-    ("data/gsm8k_validation.jsonl", "data/cot_math_x0.md"), 
-    ("data/gsm8k_train.jsonl", "data/cot_math_x0.md"), 
+    ("data/gsm8k_validation.jsonl", "data/cot_math_x0.md", 200), 
+    ("data/gsm8k_train.jsonl", "data/cot_math_x0.md", 500), 
 
-    ("data/svamp_validation.jsonl", "data/cot_math_x0.md"), 
-    ("data/svamp_train.jsonl", "data/cot_math_x0.md")
+    ("data/svamp_validation.jsonl", "data/cot_math_x0.md", 200), 
+    ("data/svamp_train.jsonl", "data/cot_math_x0.md", 500),
 ]
 
 temperatures = [1.0, 2.0, 3.0, 5.0]
 
 base_dir = "data/ballmer_20240726/cotqa"
 
-num_questions = 500
 num_sequences_per_question = 5
 max_sequence_length = 100
 min_sequence_length = 1
@@ -57,7 +56,7 @@ if not os.path.exists(base_dir):
     os.makedirs(base_dir)
 
 cnt = 0
-for question_dataset, x0_file in question_dataset__x0_file:
+for question_dataset, x0_file, num_questions in question_dataset__x0_file__numq:
     for temperature in temperatures: 
         # note: we can ignore the x0_file because there is a 1:1 mapping between x0_file and question_dataset
         question_dataset_basename = os.path.splitext(os.path.basename(question_dataset))[0]
