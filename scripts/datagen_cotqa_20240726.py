@@ -105,7 +105,6 @@ for question_dataset, x0_file in question_dataset__x0_file:
 
         traj_out_file = os.path.join(base_dir, f"traj_{question_dataset_basename}_temperature_{temperature}.jsonl")
 
-        pdb.set_trace()
 
         data_gen_func_call = f"python3 generate_data.py --x0_file {x0_file} --question_dataset {question_dataset} --num_questions {num_questions} --num_sequences_per_question {num_sequences_per_question} --max_sequence_length {max_sequence_length} --min_sequence_length {min_sequence_length} --temperature {temperature} --batch_size {batch_size} --traj_out_file {traj_out_file} --seed {seed}"
         
