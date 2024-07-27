@@ -36,7 +36,7 @@ if __name__ == "__main__":
     parser.add_argument('--val_path', type=str, default="data/traj_lex_nseq1000_maxlen300_minlen100_temp2.0.jsonl", help='Path to the validation data. Default = "data/val_traj_temp2.0_numq25_numseq25_x0truth_20240718.jsonl"')
     parser.add_argument('--out_dir', type=str, default="results/traj_lex_01", help='Output directory for results. Default = "results/traj_lex_01"')
     parser.add_argument('-r', type=int, default=32, help='LoRA Rank')
-
+    parser.add_argument('--save_every', type=int, default=1, help='Save model every n epochs. Default = 1')
     # Parse arguments
     args = parser.parse_args()
 
@@ -264,6 +264,16 @@ if __name__ == "__main__":
         # log(f"All validation kls (epoch={epoch}): "+ str(val_kls), log_path)
         log(f"Validation kl divergence (epoch={epoch}): {sum(val_kls)/len(val_kls)}", log_path)
         log("Done validation epoch " + str(epoch), log_path)
+
+        # save model every n epochs
+        if (epoch+1) % args.save_every == 0:
+            out_epoch_dir = os.path.join(out_dir, f"epoch_{epoch}")
+            if not os.path.exists(out_epoch_dir):
+                os.makedirs(out_epoch_dir)
+
+            log(f"Saving PEFT model to {out_epoch_dir}...", log_path)
+            peft_model.save_pretrained(out_epoch_dir)
+            log(f"Model saved to {out_epoch_dir}", log_path)
 
         # save model
         if sum(val_kls)/len(val_kls) < best_val_loss:
