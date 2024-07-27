@@ -37,7 +37,7 @@ from train_loop import pad_list_of_lists
 
 import plotly.express as px
 import pandas as pd
-
+import numpy as np
 
 import pdb
 
@@ -444,7 +444,6 @@ def draw_graphs_deviance(prompted_llm, peft_model, tokenizer, dataset, batch_siz
     delta_dict, delta_prime_dict = compute_deviance(prompted_llm, peft_model, tokenizer, dataset, batch_size)
     log("Done computing deviance")
 
-    pdb.set_trace()
 
     delta_avg_list = []
     delta_prime_avg_list = []
@@ -452,19 +451,25 @@ def draw_graphs_deviance(prompted_llm, peft_model, tokenizer, dataset, batch_siz
         delta_avg_list.append(sum(delta_dict[i]) / len(delta_dict[i]))
         delta_prime_avg_list.append(sum(delta_prime_dict[i]) / len(delta_prime_dict[i]))
 
-    pdb.set_trace()
+    # For delta_prime_avg_list compute a rolling average of 10
+    delta_avg_list_rolling = pd.Series(delta_avg_list).rolling(200).mean().tolist()
+    delta_prime_avg_list_rolling = pd.Series(delta_prime_avg_list).rolling(200).mean().tolist()
+
+    # Compute delta_rolling / delta_prime_rolling
+    delta_divided = [delta_avg_list_rolling[i] / delta_prime_avg_list_rolling[i] for i in range(len(delta_avg_list_rolling))]
+    ones = [1 for _ in range(len(delta_avg_list_rolling))]
 
     # Draw the graph
     df = pd.DataFrame({
-        'delta': delta_avg_list,
-        'delta_prime': delta_prime_avg_list
+        'delta / delta': ones,
+        'delta / delta_prime': delta_divided
     })
 
     # Draw a single plot with two lines on it
 
-    fig = px.line(df, x=df.index, y=['delta', 'delta_prime'])
+    fig = px.line(df, x=df.index, y=['delta / delta', 'delta / delta_prime'])
     fig.update_layout(title=f'Deviance -- {hash}')
-    fig.write_html(os.path.join(results_dir, f"{hash}_deviance.html"))
+    fig.write_html(os.path.join(results_dir, f"{hash}_deviance_invrel.html"))
 
 
 def main(): 
