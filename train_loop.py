@@ -35,7 +35,7 @@ if __name__ == "__main__":
     parser.add_argument('--data_path', type=str, default="data/traj_lex_nseq1000_maxlen300_minlen100_temp2.0.jsonl", help='Path to the training data. Default = "data/train_traj_temp2.0_numq100_numseq25_x0truth_20240718.jsonl"')
     parser.add_argument('--val_path', type=str, default="data/traj_lex_nseq1000_maxlen300_minlen100_temp2.0.jsonl", help='Path to the validation data. Default = "data/val_traj_temp2.0_numq25_numseq25_x0truth_20240718.jsonl"')
     parser.add_argument('--out_dir', type=str, default="results/traj_lex_01", help='Output directory for results. Default = "results/traj_lex_01"')
-    parser.add_argument('-r', type=int, default=32, help='LoRA Rank')
+    parser.add_argument('-r', type=float, default=32, help='LoRA Rank')
 
     # Parse arguments
     args = parser.parse_args()
