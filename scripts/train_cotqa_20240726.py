@@ -83,7 +83,7 @@ for train_dataset, validation_dataset in traj_train_traj_validation:
             question_dataset_basename = os.path.splitext(os.path.basename(train_dataset))[0]
             
             folder_name = question_dataset_basename.split("traj_")[1]
-            out_dir = f"{results_dir}/cotqa/{folder_name}_batch{batch_size}_epochs{num_epochs}_lr{lr}_r{r}"
+            out_dir = f"{results_dir}/cotqa/{folder_name}_batch_{batch_size}_epochs_{num_epochs}_lr_{lr}_r_{r}"
 
             data_gen_func_call = f"python3 train_loop.py --num_epochs {num_epochs} --batch_size {batch_size} -r {r} --learning_rate {lr} --data_path {train_dataset} --val_path {validation_dataset} --out_dir {out_dir}"
             
