@@ -11,7 +11,7 @@ train_files = glob.glob(data_dir + "/*_train_*.jsonl")
 val_files = [f.replace("_train_", "_validation_").replace("numq100", "numq50").replace("numq400","numq100") for f in train_files]
 
 lrs = [1e-4]
-rs = [1, 2, 4]
+rs = [2, 8, 32]
 batch_size = 16
 base_dir = "data/ballmer_20240726"
 results_dir = "results/ballmer_20240726"
