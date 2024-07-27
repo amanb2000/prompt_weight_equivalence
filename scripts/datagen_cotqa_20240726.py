@@ -40,7 +40,7 @@ question_dataset__x0_file = [
 
 temperatures = [1.0, 2.0, 3.0, 5.0]
 
-base_dir = "data/ballmer_20240726"
+base_dir = "data/ballmer_20240726/cotqa"
 
 num_questions = 500
 num_sequences_per_question = 5
