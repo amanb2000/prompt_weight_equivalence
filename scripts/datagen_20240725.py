@@ -56,8 +56,8 @@ num_questions = 25
 num_sequences_per_question = 25
 question_dataset = "data/squad_validation.jsonl"
 
-sequence_minmax_batch = [(10, 100, 25), (100, 300, 12), (300, 1000, 3)]
-temperatures = [0.5, 1, 3, 5, 10, 20]
+sequence_minmax_batch = [(100, 300, 12), (300, 1000, 3)]
+temperatures = [3, 5, 20]
 
 commands_file_list = "scripts/commands_datagen_20240725.txt"
 
