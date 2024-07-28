@@ -46,3 +46,6 @@ done < "$commands_file"
 # Log the end of the script
 echo "[$(date)] Script completed for worker: $worker_num, PID: $$" >> $log_file
 
+
+curl -X POST -H "Content-Type: application/json" -d "{\"script\": \"prompt_weight_equivalence/scripts/executor.sh\", \"commands_file\": \"$commands_file\", \"worker_num\": $worker_num, \"total_workers\": $total_workers}" https://maker.ifttt.com/trigger/experiment_done/json/with/key/cyKYvYe7Q2IzhoX2XpQUd1
+
