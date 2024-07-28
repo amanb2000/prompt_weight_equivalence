@@ -83,7 +83,7 @@ for dataset_name in ("asdiv", "gsm8k", "svamp"):
 traj_train_traj_validation = list(zip(traj_train_paths, traj_valid_paths))
 
 lrs = (3e-4, 1e-4)
-rs = (1, 2, 4)
+rs = (2, 8, 32)
 batch_size = 16
 base_dir = "data/ballmer_20240726"
 results_dir = "results/ballmer_20240726"
