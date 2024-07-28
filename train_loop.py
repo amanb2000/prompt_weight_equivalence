@@ -179,8 +179,8 @@ def do_epoch(peft_model, tokenizer,
         log(f"Done computing KL divergence = {kl_div.item()}", log_path)
         kl_divs.append(kl_div.item())
 
-    print(f"Epoch {epoch} loss: {kl_div.item()}")
-    log(f"Epoch {epoch} loss: {kl_div.item()}", log_path)
+    print(f"Epoch {epoch} loss: {sum(kl_divs)/len(kl_divs)}")
+    log(f"Epoch {epoch} loss: {sum(kl_divs)/len(kl_divs)}", log_path)
     return kl_divs
 
 
