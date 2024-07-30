@@ -92,13 +92,19 @@ if __name__ == "__main__":
 
 
 
-def pad_list_of_lists(llist, pad_tok_val, verbose=False):
+def pad_list_of_lists(llist, pad_tok_val, verbose=False, pad_side='right'):
     """
     Pads a list of lists with a padding token value.
     Right padding.
     """
+
+    assert pad_side == 'left' or pad_side == 'right', "pad_side must be either 'left' or 'right'"
+
     max_len = max([len(l) for l in llist])
-    padded_list = [l + [pad_tok_val] * (max_len - len(l)) for l in llist]
+    if pad_size == 'left': 
+        padded_list = [l + [pad_tok_val] * (max_len - len(l)) for l in llist]
+    elif pad_size == 'right': 
+        padded_list = [[pad_tok_val] * (max_len - len(l)) + l for l in llist]
 
     if verbose: 
         cnt = 0
