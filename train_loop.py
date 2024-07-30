@@ -95,15 +95,17 @@ if __name__ == "__main__":
 def pad_list_of_lists(llist, pad_tok_val, verbose=False, pad_side='right', return_pad_mask=False):
     """
     Pads a list of lists with a padding token value.
-    Right padding.
-    """
+    Right padding by default. 
 
+    If return_pad_mask == True, then we return a corresponding list of list with 
+    0's where we added padding and 1 where we have the original string. 
+    """
     assert pad_side == 'left' or pad_side == 'right', "pad_side must be either 'left' or 'right'"
 
     max_len = max([len(l) for l in llist])
-    if pad_side == 'left': 
+    if pad_side == 'right': 
         padded_list = [l + [pad_tok_val] * (max_len - len(l)) for l in llist]
-    elif pad_side == 'right': 
+    elif pad_side == 'left': 
         padded_list = [[pad_tok_val] * (max_len - len(l)) + l for l in llist]
 
     if verbose: 
@@ -117,6 +119,10 @@ def pad_list_of_lists(llist, pad_tok_val, verbose=False, pad_side='right', retur
     if return_pad_mask: 
         num_pads_list = [(max_len - len(l)) for l in llist]
         pad_mask = [[0 if i < num_pads else 1 for i in range(max_len)] for num_pads in num_pads_list]
+        if pad_side == 'right': 
+            # reverse each sublist
+            pad_mask = [l[::-1] for l in pad_mask]
+
 
         return padded_list, pad_mask
 
