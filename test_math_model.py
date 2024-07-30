@@ -91,6 +91,9 @@ if __name__ == "__main__":
     results_dir = args.results_dir
     if not os.path.isdir(results_dir):
         raise ValueError("results_dir is not a valid directory.")
+    
+    print("results_dir: ", results_dir)
+    print("model_epoch: ", args.model_epoch)
 
     if args.dataset == 'none':
         if 'asdiv' in results_dir:
@@ -156,7 +159,9 @@ if __name__ == "__main__":
     mean_accuracy_last_sentence_peft = 0
     mean_accuracy_last_sentence_peft_sys = 0
     if args.num_questions > len(dataset):
-        raise ValueError("Number of questions to test is greater than the number of questions in the dataset")
+        #raise ValueError("Number of questions to test is greater than the number of questions in the dataset")
+        args.num_questions = len(dataset)
+        
     for i in tqdm(range(0, args.num_questions, args.batch_size)):
         batch_start = i
         batch_end = min(i+args.batch_size, args.num_questions)
