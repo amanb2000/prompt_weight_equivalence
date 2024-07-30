@@ -92,7 +92,7 @@ if __name__ == "__main__":
 
 
 
-def pad_list_of_lists(llist, pad_tok_val, verbose=False, pad_side='right'):
+def pad_list_of_lists(llist, pad_tok_val, verbose=False, pad_side='right', return_pad_mask=False):
     """
     Pads a list of lists with a padding token value.
     Right padding.
@@ -113,6 +113,12 @@ def pad_list_of_lists(llist, pad_tok_val, verbose=False, pad_side='right'):
                 print(f"Unequal length list at batchel {cnt}: ", l)
                 # print("Padded list: ", padded_list[cnt])
             cnt += 1
+    
+    if return_pad_mask: 
+        num_pads_list = [(max_len - len(l)) for l in llist]
+        pad_mask = [[0 if i < num_pads else 1 for i in range(max_len)] for num_pads in num_pads_list]
+
+        return padded_list, pad_mask
 
     return padded_list
 
