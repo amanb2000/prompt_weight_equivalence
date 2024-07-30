@@ -42,10 +42,13 @@ def reformat_answer_string(answer, dataset):
         #int_to_error = int(num_str)
     elif dataset == "gsm8k":
         # GSM8k looks like more.\n#### 5"
+        #remove commas from the string
+        answer = answer.replace(",", "")
         num_str = answer.split(" ")[-1]
         int_to_error = int(num_str)
     elif dataset == "svamp":
         # convert answer directly to an int.
+        answer = answer.replace(",", "")
         int_answer = int(answer)
         num_str = str(int_answer)
     else:
@@ -64,6 +67,7 @@ def assess_correct(generate_str_list, correct_answer_list, dataset_str):
     selved_list_last_sentence = []
     for i in range(len(generate_str_list)):
         generate_str = generate_str_list[i]
+        generate_str.replace(",", "")
         correct_answer = reformat_answer_string(correct_answer_list[i], dataset=dataset_str)
         if f"The answer is {correct_answer}." in generate_str:
             solved_list.append(True)
@@ -158,13 +162,10 @@ if __name__ == "__main__":
     mean_accuracy_last_sentence_base = 0
     mean_accuracy_last_sentence_peft = 0
     mean_accuracy_last_sentence_peft_sys = 0
-    if args.num_questions > len(dataset):
-        #raise ValueError("Number of questions to test is greater than the number of questions in the dataset")
-        args.num_questions = len(dataset)
-        
-    for i in tqdm(range(0, args.num_questions, args.batch_size)):
+    num_tests = min(args.num_questions, len(dataset))
+    for i in tqdm(range(0, num_tests, args.batch_size)):
         batch_start = i
-        batch_end = min(i+args.batch_size, args.num_questions)
+        batch_end = min(i+args.batch_size, num_tests)
         batch = dataset[batch_start:batch_end]
 
         questions = batch['question']
@@ -239,18 +240,18 @@ if __name__ == "__main__":
         # print("Last sentence accuracy on peft model: ", sum(slls_nosys)/len(slls_nosys))
         # print("Last sentence accuracy on peft model with system prompt: ", sum(slls_peft_nosys)/len(slls_peft_nosys))
         
-        mean_accuracy_base += sum(solved_list) / args.num_questions
-        mean_accuracy_peft += sum(solved_list_nosys) / args.num_questions
-        mean_accuracy_peft_sys += sum(solved_list_peft_sys) / args.num_questions
-        mean_accuracy_upper_bound_base += sum(slub) / args.num_questions
-        mean_accuracy_upper_bound_peft += sum(slub_nosys) / args.num_questions
-        mean_accuracy_upper_bound_peft_sys += sum(slub_peft_sys) / args.num_questions
-        mean_accuracy_last_sentence_base += sum(slls) / args.num_questions
-        mean_accuracy_last_sentence_peft += sum(slls_nosys) / args.num_questions
-        mean_accuracy_last_sentence_peft_sys += sum(slls_peft_nosys) / args.num_questions
+        mean_accuracy_base += sum(solved_list) / num_tests
+        mean_accuracy_peft += sum(solved_list_nosys) / num_tests
+        mean_accuracy_peft_sys += sum(solved_list_peft_sys) / num_tests
+        mean_accuracy_upper_bound_base += sum(slub) / num_tests
+        mean_accuracy_upper_bound_peft += sum(slub_nosys) / num_tests
+        mean_accuracy_upper_bound_peft_sys += sum(slub_peft_sys) / num_tests
+        mean_accuracy_last_sentence_base += sum(slls) / num_tests
+        mean_accuracy_last_sentence_peft += sum(slls_nosys) / num_tests
+        mean_accuracy_last_sentence_peft_sys += sum(slls_peft_nosys) / num_tests
 
 
-    json_filename = f"mathtest_ep{epoch_num}_numq{args.num_questions}_gentemp{args.temperature}_datasetname{dataset_name}.json"
+    json_filename = results_dir + f"/mathtest_ep{epoch_num}_numq{args.num_questions}_gentemp{args.temperature}_datasetname{dataset_name}.json"
 
     results_dict = {"args": vars(args),
                     "mean_accuracy_base": mean_accuracy_base,
