@@ -101,9 +101,9 @@ def pad_list_of_lists(llist, pad_tok_val, verbose=False, pad_side='right'):
     assert pad_side == 'left' or pad_side == 'right', "pad_side must be either 'left' or 'right'"
 
     max_len = max([len(l) for l in llist])
-    if pad_size == 'left': 
+    if pad_side == 'left': 
         padded_list = [l + [pad_tok_val] * (max_len - len(l)) for l in llist]
-    elif pad_size == 'right': 
+    elif pad_side == 'right': 
         padded_list = [[pad_tok_val] * (max_len - len(l)) + l for l in llist]
 
     if verbose: 
