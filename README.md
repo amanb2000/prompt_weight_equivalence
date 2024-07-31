@@ -23,7 +23,7 @@ python3 download_data.py
 ## Run Experiments 
 
 ```bash
-# (TODO) generate trajectory dataset with ground truth prompted logits
+# generate trajectory dataset with ground truth prompted logits
 python3 generate_data.py \
     --prompt_template data/llama_sys_question_template.md \
     --x0_file data/truth_x0.md \
@@ -37,7 +37,7 @@ python3 generate_data.py \
     --train_out_file data/train_traj_temp2.0_numq100_numseq25_x0truth_20240718.jsonl
     --model_name meta-llama/Meta-Llama-3-8B-Instruct 
 
-# (TODO) generate validation data
+# generate validation data
 python3 generate_data.py \
     --prompt_template data/llama_sys_question_template.md \
     --x0_file data/truth_x0.md \
@@ -52,7 +52,7 @@ python3 generate_data.py \
     --model_name meta-llama/Meta-Llama-3-8B-Instruct 
 
 
-
+# train a LoRA model to match the probabilities over the trajectories generated above.
 python3 train_loop.py --num_epochs 10 \
     --batch_size 20 \
     --learning_rate 1e-4 \
@@ -60,6 +60,15 @@ python3 train_loop.py --num_epochs 10 \
     --val_path data/val_traj_temp2.0_numq25_numseq25_x0truth_20240718.jsonl \
     --out_dir results/truthful_squad_match_01_ep1000_batch20
 ```
+
+
+## Dashboard
+
+To run the streamlit dashboard, use 
+```bash
+streamlit run dashboard/app.py
+```
+
 
 
 ## Experiments 2024 07 19
