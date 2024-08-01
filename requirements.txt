@@ -9,5 +9,8 @@ transformers
 datasets
 peft
 
+langdetect
+nltk
+
 plotly
 tqdm
