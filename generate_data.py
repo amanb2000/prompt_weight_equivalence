@@ -33,11 +33,11 @@ def format_prompt(system_prompt, user_prompt, use_system=True):
     """ System prompt has the system and user prompts (question) and the header
     for the assistant response according to the Llama docs.
     """
-    if use_system: 
-        return f"<|start_header_id|>system<|end_header_id|>\n\n{system_prompt}<|eot_id|>\n<|start_header_id|>user<|end_header_id|>{user_prompt}<|eot_id|>\n<|start_header_id|>assistant<|end_header_id|>\n\n"
-    else: 
-        return f"<|start_header_id|>system<|end_header_id|>\n\n<|eot_id|>\n<|start_header_id|>user<|end_header_id|>{user_prompt}<|eot_id|>\n<|start_header_id|>assistant<|end_header_id|>\n\n"
-
+    if use_system:
+        _system_prompt = system_prompt
+    else:
+        _system_prompt = ""
+    return f"<|start_header_id|>system<|end_header_id|>\n\n{_system_prompt}<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n{user_prompt}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n"
 
 if __name__ == "__main__":
     args = parser.parse_args()
