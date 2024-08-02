@@ -37,6 +37,8 @@ if __name__ == "__main__":
     parser.add_argument('--out_dir', type=str, default="results/traj_lex_01", help='Output directory for results. Default = "results/traj_lex_01"')
     parser.add_argument('-r', type=int, default=32, help='LoRA Rank')
     parser.add_argument('--save_every', type=int, default=1, help='Save model every n epochs. Default = 1')
+
+    parser.add_argument('--max_traj_len', type=int, default=-1, help='Maximum usable trajectory length from the dataset. Default = -1 (use all)')
     # Parse arguments
     args = parser.parse_args()
 
@@ -147,15 +149,19 @@ def do_epoch(peft_model, tokenizer,
         input_ids_nosys_list_ = batch['input_ids_nosys'] # pad with tokenizer.pad_token_id
         input_ids_list_ = batch['input_ids'] # pad with tokenizer.pad_token_id
 
-        input_ids_nosys_list = pad_list_of_lists(input_ids_nosys_list_, tokenizer.pad_token_id, verbose=False)
-        input_ids_list = pad_list_of_lists(input_ids_list_, tokenizer.pad_token_id, verbose=False)
-
         # grab masks forr each input_ids
         mask_nosys_list_ = batch['generated_text_mask_nosys'] # pad with 0
         mask_list_ = batch['generated_text_mask'] # pad with 0
 
+
+        # pad the lists of lists so that they're all the max length -- right padding
+        input_ids_nosys_list = pad_list_of_lists(input_ids_nosys_list_, tokenizer.pad_token_id, verbose=False)
+        input_ids_list = pad_list_of_lists(input_ids_list_, tokenizer.pad_token_id, verbose=False)
+
         mask_nosys_list = pad_list_of_lists(mask_nosys_list_, 0, verbose=False)
         mask_list = pad_list_of_lists(mask_list_, 0, verbose=False)
+
+
 
 
         device = peft_model.device
@@ -163,6 +169,13 @@ def do_epoch(peft_model, tokenizer,
         input_ids_nosys = torch.tensor(input_ids_nosys_list).to(device)
         mask = torch.tensor(mask_list).to(device) == 1
         mask_nosys = torch.tensor(mask_nosys_list).to(device) == 1
+
+
+        pdb.set_trace()
+        # crop the mask and the input_ids to only have the first args.max_traj_len 
+        # tokens within the portion of the trajectory where mask = 1
+        if args.max_traj_len > 0:
+            # 
 
         assert input_ids.shape == mask.shape
         assert input_ids_nosys.shape == mask_nosys.shape
@@ -181,6 +194,7 @@ def do_epoch(peft_model, tokenizer,
 
         unprompted_logits = unprompted_logits_[mask_nosys, :]
         prompted_logits = prompted_logits_[mask, :]
+
 
         # Compute KL divergence: KL(prompted, unprompted)
         kl_div_ = F.kl_div(F.log_softmax(unprompted_logits, dim=-1), 
