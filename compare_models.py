@@ -43,10 +43,10 @@ import pdb
 
 def parse_args(): 
     parser = argparse.ArgumentParser(description='Compare trained model to prompted model')
-    parser.add_argument('--results_dir', type=str, required=True, help='Location of trained model, as given in --out_dir in train_loop.py.')
+    parser.add_argument('--results_dir', type=str, required=True, help='Location of trained model, as given in --out_dir in train_loop.py (or one of the subdirectories with an epoch_N save point).')
     parser.add_argument('--data_file', type=str, default="NONE", help='Location of .jsonl dataset. If NONE, we will pull the args.json from results_dir and use the validation dataset specified there.')
-    parser.add_argument('--x0_override', type=str, default=None, help="Path to a .md file containing the string for the x0 (system prompt) override. This will be 'surgically inserted' between the <|start_header_id|>system<|end_header_id|>\n\n[--x0_override GOES HERE]<|eot_id|>\n<|start_header_id|>user<|end_header_id|>. THIS ONLY WORKS FOR LLAMA-3 MODELS AND OTHER MODELS WITH THE SAME TOKENIZER AND PROMPT FORMAT.")
-    parser.add_argument('--path_prefix', type=str, default=None, help="Prefix for saved files. Helpful for clarifying if you used --x0_override. The rest of the saved figures names will specify only whether it's the PEFT model or the base model and whether it is prompted or unprompted.")
+    parser.add_argument('--u_override', type=str, default=None, help="Path to a .md file containing the string for the control input u (system prompt) override. This will be 'surgically inserted' between the <|start_header_id|>system<|end_header_id|>\n\n[--u_override GOES HERE]<|eot_id|>\n<|start_header_id|>user<|end_header_id|>. THIS ONLY WORKS FOR LLAMA-3 MODELS AND OTHER MODELS WITH THE SAME TOKENIZER AND PROMPT FORMAT.")
+    parser.add_argument('--path_prefix', type=str, default=None, help="Prefix for saved files. Helpful for clarifying if you used --u_override. The rest of the saved figures names will specify only whether it's the PEFT model or the base model and whether it is prompted or unprompted.")
     parser.add_argument("--batch_size", type=int, default=8, help="Batch size for computing log likelihoods. Default=8.")
     args =  parser.parse_args()
 
@@ -105,28 +105,28 @@ def get_models(results_dir, device='cuda'):
     return base_model, peft_model, tokenizer
 
 
-def get_x0_override(x0_override_path, tokenizer): 
+def get_u_override(u_override_path, tokenizer): 
     # get the string and the input_ids WITH NO BOS OR EOS TOKENS 
-    with open(x0_override_path, 'r') as f: 
-        x0_str = f.read()
+    with open(u_override_path, 'r') as f: 
+        u_str = f.read()
 
-    log(f"Loaded x0_str='{x0_str}' from {x0_override_path}")
+    log(f"Loaded u_str='{u_str}' from {u_override_path}")
 
-    # tokenize the x0_str
-    x0_list = tokenizer(x0_str)['input_ids'] # this is a 1-d list
-    log(f"x0_list is: {x0_list}")
+    # tokenize the u_str
+    u_list = tokenizer(u_str)['input_ids'] # this is a 1-d list
+    log(f"u_list is: {u_list}")
 
     # remove the BOS and EOS tokens -- any tokens in tokenizer.special_tokens.
-    x0_list = [x for x in x0_list if x not in (128000, 128001, 128009)]
+    u_list = [x for x in u_list if x not in (128000, 128001, 128009)]
 
-    log(f"After removing BOS and EOS tokens, x0_list is: '{x0_list}'")
-    log(f"After removing BOS and EOS tokens, tokenizer.decode(x0_str) = '{tokenizer.decode(x0_list)}'")
+    log(f"After removing BOS and EOS tokens, u_list is: '{u_list}'")
+    log(f"After removing BOS and EOS tokens, tokenizer.decode(u_str) = '{tokenizer.decode(u_list)}'")
 
-    return x0_str, x0_list
+    return u_str, u_list
 
 
-def transplant_x0(x0_list, input_ids_list, mask_list, tokenizer):
-    """ Surgically implants x0_list into input_ids_list and mask_list to replace 
+def transplant_u(u_list, input_ids_list, mask_list, tokenizer):
+    """ Surgically implants u_list into input_ids_list and mask_list to replace 
     the existing text encased in the <|start_header_id|>system<|end_header_id|> 
     and <|start_header_id|>user<|end_header_id|> tokens.
     """
@@ -162,8 +162,8 @@ def transplant_x0(x0_list, input_ids_list, mask_list, tokenizer):
         
         assert user_start is not None, "Could not find user_tokens in input_ids_list"
 
-        input_ids_list[i] = input_ids_list[i][:system_end] + x0_list + input_ids_list[i][user_start:]
-        mask_list[i] = mask_list[i][:system_end] + [0]*len(x0_list) + mask_list[i][user_start:]
+        input_ids_list[i] = input_ids_list[i][:system_end] + u_list + input_ids_list[i][user_start:]
+        mask_list[i] = mask_list[i][:system_end] + [0]*len(u_list) + mask_list[i][user_start:]
 
     return input_ids_list, mask_list
     
@@ -173,7 +173,7 @@ def get_loss(prompted_llm, peft_model, tokenizer,
              batch_size, 
              optimizer, 
              do_step = True, 
-             x0_override = None):
+             u_override = None):
     """
     Gets the loss for {prompted_llm, peft_model} on the {prompted, unprompted} 
     inputs_ids from a dataset. 
@@ -184,9 +184,9 @@ def get_loss(prompted_llm, peft_model, tokenizer,
     print("peft model device: ", peft_model.device)
     print("prompted model device: ", prompted_llm.device)
 
-    if x0_override is not None:
-        log(f"Using x0_override from {x0_override}")
-        x0_str, x0_list = get_x0_override(x0_override, tokenizer)
+    if u_override is not None:
+        log(f"Using u_override from {u_override}")
+        u_str, u_list = get_u_override(u_override, tokenizer)
 
 
     unprompted_logits_peft_losses = []
@@ -212,18 +212,18 @@ def get_loss(prompted_llm, peft_model, tokenizer,
         mask_nosys_list = pad_list_of_lists(mask_nosys_list_, 0, verbose=False)
         mask_list = pad_list_of_lists(mask_list_, 0, verbose=False)
 
-        # If the user specified --x0_override, we will insert the override into 
+        # If the user specified --u_override, we will insert the override into 
         # input_ids_list and mask_list. 
         # The override WILL NOT be applied to input_ids_nosys_list and mask_nosys_list. 
         # 
         # We can ensure that the override is applied to the correct indices by 
         # comparing input_ids[mask] with input_ids_nosys[mask_nosys]. 
         # Recall that the mask selects for only the tokens in the trajectory 
-        # (i.e., the generated text and not the system prompt x0).
+        # (i.e., the generated text and not the system prompt u).
         # This is done below once we convert to tensors.
 
-        if x0_override is not None:
-            input_ids_list, mask_list = transplant_x0(x0_list, input_ids_list, mask_list, tokenizer)
+        if u_override is not None:
+            input_ids_list, mask_list = transplant_u(u_list, input_ids_list, mask_list, tokenizer)
 
         device = prompted_llm.device
         input_ids = torch.tensor(input_ids_list).to(device)
@@ -504,24 +504,26 @@ def main():
     log("Done getting dataset.")
 
     # get the md5sum of dataset_path
-    log("Computing md5sum of dataset")
+    log("Building path prefix")
     path_prefix = os.path.splitext(os.path.basename(dataset_path))[0] 
-    if args.x0_override is not None:
-        path_prefix += "_X0OVERRIDE"+os.path.splitext(os.path.basename(args.x0_override))[0]+"_"
+    if args.u_override is not None:
+        path_prefix += "_u_override_"+os.path.splitext(os.path.basename(args.u_override))[0]+"_"
     log(f"path_prefix: {path_prefix}")
 
 
 
     # get the models
-    log(f"Getting models from {args.results_dir}")
+    log(f"Getting PEFT model from {args.results_dir}")
     base_model, peft_model, tokenizer = get_models(args.results_dir)
     log("Done getting models.")
+
+
 
     # compute the log likelihoods
     log("Computing log likelihoods")
     res_dict = get_loss(base_model, peft_model, tokenizer, dataset, 
                         batch_size=args.batch_size, optimizer=None, do_step=False, 
-                        x0_override=args.x0_override)
+                        u_override=args.u_override)
     log("Done computing log likelihoods")
 
     # save the results
@@ -551,5 +553,5 @@ def main_deviance():
 
 
 if __name__ == "__main__": 
-    # main()
-    main_deviance()
+    main()
+    # main_deviance()
