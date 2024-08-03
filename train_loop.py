@@ -130,12 +130,42 @@ def pad_list_of_lists(llist, pad_tok_val, verbose=False, pad_side='right', retur
 
     return padded_list
 
+def crop_trajectories(input_ids_list, mask_list, max_traj_len):
+    """ Based on the masks which have ones where the trajectories are, we will 
+    crop the input_ids and mask_list so that there are only at most max_traj_len 
+    tokens in the trajectory. 
+    """
+    assert max_traj_len > 0, "max_traj_len must be greater than 0 in crop_trajectories()"
+
+    # iterate through the mask_list and the input_ids list,
+    # find the number of ones in the mask_list, 
+    # crop the mask_list and input_ids from the right (cut off stuff at the end) 
+    # that exceeds the max_traj_len
+    new_input_ids_list = []
+    new_mask_list = []
+
+    for input_ids, mask in zip(input_ids_list, mask_list): 
+        num_ones = sum(mask)
+        # check if there are any zeros after the ones -- if so, error 
+        assert len(input_ids) == len(mask), "input_ids and mask_ids must be the same length"
+
+        first_1_ind = mask.index(1)
+        input_ids_ = input_ids[:(first_1_ind + max_traj_len)]
+        mask_ = mask[:(first_1_ind + max_traj_len)]
+        
+        new_input_ids_list.append(input_ids_)
+        new_mask_list.append(mask_)
+
+    return new_input_ids_list, new_mask_list
+
+
 def do_epoch(peft_model, tokenizer,
              dataset, 
              batch_size, 
              log_path, 
              optimizer, 
-             do_step = True):
+             do_step = True, 
+             max_traj_len=-1):
     """
     Trains the model for one epoch on the given dataset.
     """
@@ -154,13 +184,17 @@ def do_epoch(peft_model, tokenizer,
         mask_list_ = batch['generated_text_mask'] # pad with 0
 
 
+        if max_traj_len > 0: 
+            input_ids_list_, mask_list_ = crop_trajectories(input_ids_list_, mask_list_, max_traj_len)
+            input_ids_nosys_list_, mask_nosys_list_ = crop_trajectories(input_ids_nosys_list_, mask_nosys_list_, max_traj_len)
+
+
         # pad the lists of lists so that they're all the max length -- right padding
         input_ids_nosys_list = pad_list_of_lists(input_ids_nosys_list_, tokenizer.pad_token_id, verbose=False)
         input_ids_list = pad_list_of_lists(input_ids_list_, tokenizer.pad_token_id, verbose=False)
 
         mask_nosys_list = pad_list_of_lists(mask_nosys_list_, 0, verbose=False)
         mask_list = pad_list_of_lists(mask_list_, 0, verbose=False)
-
 
 
 
@@ -171,16 +205,14 @@ def do_epoch(peft_model, tokenizer,
         mask_nosys = torch.tensor(mask_nosys_list).to(device) == 1
 
 
-        pdb.set_trace()
-        # crop the mask and the input_ids to only have the first args.max_traj_len 
-        # tokens within the portion of the trajectory where mask = 1
-        if args.max_traj_len > 0:
-            # 
 
         assert input_ids.shape == mask.shape
         assert input_ids_nosys.shape == mask_nosys.shape
 
         assert (input_ids[mask] != input_ids_nosys[mask_nosys]).sum() == 0, "Prompted and unprompted input_ids do not match within their respective masks for the generated text (must be identical)"
+
+        # per-row sum over mask 
+        assert (mask.sum(dim=1) == mask_nosys.sum(dim=1)).all(), "Prompted and unprompted masks must have the same number of tokens per row"
 
         log("Computing unprompted logits...", log_path)
         unprompted_logits_ = peft_model(input_ids_nosys).logits
@@ -280,7 +312,8 @@ if __name__ == "__main__":
                  batch_size=batch_size,
                  log_path=log_path,
                  optimizer=optimizer,
-                 do_step=True)
+                 do_step=True, 
+                 max_traj_len=args.max_traj_len)
         # log(f"All train kls (epoch={epoch}): ", train_kls)
         log(f"Train kl divergence (epoch={epoch}): {sum(train_kls)/len(train_kls)}", log_path)
 
@@ -292,7 +325,8 @@ if __name__ == "__main__":
                  batch_size=batch_size,
                  log_path=log_path,
                  optimizer=optimizer,
-                 do_step=False)
+                 do_step=False, 
+                 max_traj_len=args.max_traj_len)
         # log(f"All validation kls (epoch={epoch}): "+ str(val_kls), log_path)
         log(f"Validation kl divergence (epoch={epoch}): {sum(val_kls)/len(val_kls)}", log_path)
         log("Done validation epoch " + str(epoch), log_path)
